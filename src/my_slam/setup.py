@@ -25,7 +25,9 @@ setup(
     entry_points={
         'console_scripts': [
             'PID_Node = my_slam.PID_Node:main',
-            'testPublish = my_slam.testPublish:main'
+            'testPublish = my_slam.testPublish:main',
+            'EKF_prototype = my_slam.EKF_prototype:main',
+            'get_gyro_biases = my_slam.get_gyro_biases:main',
         ],
     },
 )

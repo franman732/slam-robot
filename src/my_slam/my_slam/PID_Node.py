@@ -60,10 +60,6 @@ class MyNode(Node):
         self.updatePID()
 
     def updatePID(self):
-
-        # We cannot calculate anything until we
-        # have both pieces of information.
-
         if self.newLocation is None:
             return
 
@@ -72,10 +68,8 @@ class MyNode(Node):
 
         print("UPDATING PID")
 
-        # Calculate error
         error = self.newTarget - self.newLocation
 
-        # Proportional controller
         self.xVelocity = p * error
 
         print(f"Current: {self.newLocation}")
