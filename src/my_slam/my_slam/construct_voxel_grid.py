@@ -19,13 +19,15 @@ class createVoxelGrid(Node):
                                      0, # linear bias
                                      0]) # angular bias
 
+        self.lidarMessage = None
+
         self.finalVoxelDict = {} # hash (x, y) --> x, y, mean vector, covarianceMatrix
         self.infoDict = {} # hash (x, y) --> total # of elements, mean vector, product matrix 
 
         self.lidar_subscriber = self.create_subscription (
             LaserScan,
             '/scan',
-            self.constructGrid,
+            self.updateLidarScan,
             1
         )
 
@@ -45,12 +47,18 @@ class createVoxelGrid(Node):
     def updateStateVector(self, message):
         self.stateVector = np.array(message.data)
 
+    def updateLidarScan(self, message):
+        if self.lidarMessage == None:
+            self.constructGrid(self.lidarMessage)
+        
+        self.lidarMessage = message.data 
+
     def constructGrid(self, message):
         for i, range in enumerate(message.ranges):
             if range > 20: # max range set to 20 meters
                 continue
 
-            angle = i * 0.01749303564429283 # This is the number, in radians, my lidar says it angle increases by each increment.
+            angle = message.angle_min + i * message.angle_increment # This is the number, in radians, my lidar says it angle increases by each increment.
 
             relativeX = range * np.cos(angle)
             relativeY = range * np.sin(angle)
@@ -61,10 +69,8 @@ class createVoxelGrid(Node):
             voxelX = mapX // .20 # X input for dictionary
             voxelY = mapY // .20 # Y input for dictionary
 
-            hashedVal = self.hash(voxelX, voxelY)
-
             # [0] --> number of entries, [1] --> mean vector [meanX, meanY], [2] --> previous product matrix
-            previousValues = self.infoDict.get(hashedVal, [0, np.array([0, 0]), np.array([[0 , 0], [0, 0]])])
+            previousValues = self.infoDict.get((voxelX, voxelY), [0, np.array([0, 0]), np.array([[0 , 0], [0, 0]])])
             updatedN = previousValues[0] + 1
             
             meanDiff = np.array([mapX, mapY]) - previousValues[1] # All of this is done using vector element by element subtraction, multiplication, and division.
@@ -79,8 +85,8 @@ class createVoxelGrid(Node):
             else:
                 covMatrix = np.zeros((2, 2))
 
-            self.finalVoxelDict[hashedVal] = [voxelX, voxelY, updatedMean, covMatrix]
-            self.infoDict[hashedVal] = [updatedN, updatedMean, updatedProductMatrix]
+            self.finalVoxelDict[(voxelX, voxelY)] = [voxelX, voxelY, updatedMean, covMatrix]
+            self.infoDict[(voxelX, voxelY)] = [updatedN, updatedMean, updatedProductMatrix]
 
         msg = VoxelGrid()
         for element in self.finalVoxelDict.values():
