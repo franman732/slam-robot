@@ -10,10 +10,13 @@ from slam_messages.msg import Voxel
 
 class scanMatching(Node):
     def __init__(self):
+        super().__init__('map_matching_node') 
+
         self.stateVector = None
         self.updatedVector = None
         self.voxelDict = {}
         self.voxelSize = 20
+        self.lambdaRegress = 1e-4
 
         """stateVector:
             np.array([0,  x position
@@ -55,16 +58,16 @@ class scanMatching(Node):
         self.stateVector = np.array(message.data)
 
     def updateVoxel(self, message):
-        for voxel in message:
-            self.voxelDict[(voxel.voxel_x, voxel.voxel_y)] = ([voxel.x_mean, voxel.y_mean], [[voxel.x_var, voxel.xy_cov], [voxel.xy_cov, voxel.y_var]])
+        for voxel in message.voxels:
+            self.voxelDict[(voxel.voxel_x, voxel.voxel_y)] = (np.array([voxel.x_mean, voxel.y_mean]), np.array([[voxel.x_var, voxel.xy_cov], [voxel.xy_cov, voxel.y_var]]))
 
     def calculateJ(self, pX, pY, theta):
-        return [[ 1, 0, -pX * np.sin(theta) - pY * np.cos(theta)],
-                [0, 1, pX * np.cos(theta) - pY * np.sin(theta)]]
+        return np.array([[ 1, 0, -pX * np.sin(theta) - pY * np.cos(theta)],
+                        [0, 1, pX * np.cos(theta) - pY * np.sin(theta)]])
 
     def calculateH(self, pX, pY, theta):
-        return [[-pX * np.cos(theta) + pY * np.sin(theta)],
-                [-pX * np.sin(theta) - pY * np.cos(theta)]]
+        return np.array([[-pX * np.cos(theta) + pY * np.sin(theta)],
+                        [-pX * np.sin(theta) - pY * np.cos(theta)]])
 
     def calculateS(self, J, covariance, point, mean):
         return J.T @ covariance @ (point - mean)
@@ -79,13 +82,13 @@ class scanMatching(Node):
         return Q
 
     def createPosEstimate(self, message):
-        if self.voxelDict != {}:
+        if self.voxelDict != {} and self.stateVector is not None:
             deltaPos = np.array([100, 100, 100])
             iterationCount = 0
             storageList = []
 
             while np.linalg.norm(deltaPos) > 0.001 and iterationCount < 100:
-                robotPosVect = [self.stateVector[0], self.stateVector[1]]
+                robotPosVect = np.array([self.stateVector[0], self.stateVector[1]])
                 totalError = 0
                 gradient = np.zeros(3)
                 Hessian =  np.zeros((3, 3))
@@ -96,9 +99,9 @@ class scanMatching(Node):
                 
                     angle = message.angle_min + i * message.angle_increment # This is the number, in radians, my lidar says it angle increases by each increment.
 
-                    changePosVect = [lidarRange * np.cos(angle), lidarRange * np.sin(angle)]
+                    changePosVect = np.array([lidarRange * np.cos(angle), lidarRange * np.sin(angle)])
 
-                    truePosVect = [[np.cos(self.stateVector[2]), -np.sin(self.stateVector[2])], [np.sin(self.stateVector[2]), np.cos(self.stateVector[2])]] @ changePosVect + robotPosVect # True position represented as a vector.
+                    truePosVect =[[np.cos(self.stateVector[2]), -np.sin(self.stateVector[2])], [np.sin(self.stateVector[2]), np.cos(self.stateVector[2])]] @ changePosVect + robotPosVect # True position represented as a vector.
 
                     voxelX = truePosVect[0] // self.voxelSize
                     voxelY = truePosVect[1] // self.voxelSize
@@ -111,7 +114,7 @@ class scanMatching(Node):
                     A = np.linalg.inv([[voxel.x_var, voxel.xy_cov],
                                          [voxel.xy_cov, voxel.y_var]])
 
-                    mean = [voxel.x_mean, voxel.y_mean]
+                    mean = np.array([voxel.x_mean, voxel.y_mean])
 
                     posDiffVect = truePosVect - mean
 
@@ -129,8 +132,15 @@ class scanMatching(Node):
                     gradient += error * S
                     Hessian += error * (Q - np.outer(S, S))
 
-                deltaPos = -np.linalg.solve(Hessian, gradient)
-                updatedVector = self.stateVector + deltaPos
+                Hessian_reg = Hessian + self.lambdaRegress * np.eye(3)
+
+                try:
+                    deltaPos = -np.linalg.solve(Hessian_reg, gradient)
+                except np.linalg.LinAlgError:
+                    print("Hessian is still singular! Skipping optimization loop.")
+                    break # or continue/handle gracefully
+                
+                updatedVector = self.stateVector + np.append(deltaPos, [0, 0, 0, 0])
                 
                 print("UPDATED VECTOR: ", updatedVector)
                 print("PREVIOUS VECTOR: ", self.stateVector)
@@ -140,13 +150,30 @@ class scanMatching(Node):
 
             print("WE HAVE EXITED LOOP")
 
-            storageList.append(self.stateVector.flatten())
-            storageList.append(Hessian.flatten())
+            storageList.extend(self.stateVector.flatten().tolist())
+            storageList.extend(np.linalg.pinv(Hessian).flatten().tolist())
 
-            msg = Float64MultiArray()
+            # 2. Package and publish
+            msg = Float64MultiArray() 
             msg.data = storageList
             self.correctionPublisher.publish(msg)
-                
+
+
+def main(args = None):
+    rclpy.init(args=args)
+
+    newNode = scanMatching()
+
+    rclpy.spin(newNode)
+
+    newNode.destroy()
+
+    rclpy.shutdown()
+
+if __name__ == "__main__":
+    print("WE RUNNING MAP MATCHING!")
+    main()
+
 
 
 

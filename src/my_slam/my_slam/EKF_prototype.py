@@ -7,7 +7,10 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float64MultiArray
 
-stateVector = np.array([0, # x pos 0
+class EKF(Node):
+    def __init__(self):
+        super().__init__("EKF")
+        self.stateVector = np.array([0, # x pos 0
                         0, # y pos 1
                         0, # theta 2
                         0, # linear velocity 3
@@ -15,15 +18,23 @@ stateVector = np.array([0, # x pos 0
                         0.1221926719, # linear bias 5; This is preset to start, and is just the value i got from a 2 minute standstill test
                         -1.28 * 10 ** - 7]) # angular bias 6       These values are updated later using the covariance and noise matrixes when we do correction phase.
 
-class EKF_Prediction(Node):
-    def __init__(self):
-        super().__init__("EKF_Prediction")
+        self.covarianceMatrix = np.diag([
+                            0.01**2,                 # x variance
+                            0.01**2,                 # y variance
+                            np.deg2rad(1)**2,        # theta variance
+                            0.05**2,                 # velocity variance
+                            0.05**2,                 # angular velocity variance
+                            0.01**2,                 # linear bias variance
+                            0.01**2                  # angular bias variance
+                        ])
+
+        self.sensorNoiseMatrix = np.diag([0, 0, 0, 0, 0, 0, 0])
 
         self.newOdom = 0
         self.odomVel = 0
         self.odomAngVel = 0
 
-        self.startTime = time.perf_counter() # Represents the time from the start of the program, in ms, to the time that we last updated our stateVector. This is used to determine delta T
+        self.startTime = time.perf_counter() # Represents the time from the start of the program, in ms, to the time that we last updated our self.stateVector. This is used to determine delta T
 
         self.IMU_subscriber = self.create_subscription(
             Imu,
@@ -39,9 +50,15 @@ class EKF_Prediction(Node):
             1
         )
 
-        self.publisher = self.create_publisher(
+        self.prediction_publisher = self.create_publisher(
             Float64MultiArray,
             '/prediction',
+            10
+        )
+
+        self.corrected_publisher = self.create_publisher(
+            Float64MultiArray,
+            '/corrected',
             10
         )
         
@@ -60,13 +77,76 @@ class EKF_Prediction(Node):
         self.newOdom = 1
         self.odomVel = np.sqrt(odomVelX ** 2 + odomVelY ** 2)
 
+    def calculateF(self, deltaT, linAcc):
+        theta = self.stateVector[2]
+        linVelocity = self.stateVector[3]
+        accBias = self.stateVector[5]
+        
+        F = np.array([[1, 
+              0, 
+              -linVelocity * np.sin(theta) * deltaT - (1/2) * (linAcc - accBias) * np.sin(theta) * (deltaT ** 2), 
+              np.cos(theta) * deltaT, 
+              0,
+              -(1/2) * np.cos(theta) * (deltaT ** 2), 
+              0],
+
+             [0,
+              1,
+              linVelocity * np.cos(theta) * deltaT + (1/2) * (linAcc - accBias) * np.cos(theta) * (deltaT ** 2),
+              np.sin(theta) * deltaT,
+              0,
+              -(1/2) * np.sin(theta) * (deltaT ** 2),
+              0],
+
+             [0,
+              0,
+              1,
+              0,
+              deltaT,
+              0,
+              -deltaT],
+
+             [0,
+              0,
+              0,
+              1,
+              0,
+              -deltaT,
+              0],
+
+             [0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              -deltaT],
+
+             [0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0],
+
+             [0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1]])
+        
+        return F
+
     def updateStateVector(self, deltaT, angularVel, linearAccel): # accelerations come from IMU, and angular velocity comes from IMU
-        xPos = stateVector[0]
-        yPos = stateVector[1]
-        theta = stateVector[2]
-        stateLinearVel = stateVector[3]
-        linearBias = stateVector[5]
-        angularBias = stateVector[6]
+        xPos = self.stateVector[0]
+        yPos = self.stateVector[1]
+        theta = self.stateVector[2]
+        stateLinearVel = self.stateVector[3]
+        linearBias = self.stateVector[5]
+        angularBias = self.stateVector[6]
 
         # Makes linearVel either the stored state velocity, or the velocity outputted by the odometry if there is a new velocity available.
         linearVel = (stateLinearVel * abs(self.newOdom - 1) + self.newOdom * self.odomVel)
@@ -76,27 +156,54 @@ class EKF_Prediction(Node):
         else:
             angularVel = angularVel - angularBias
 
-        stateVector[0] = xPos + linearVel * np.cos(theta) * deltaT + (1/2) * (linearAccel - linearBias) * np.cos(theta) * (deltaT ** 2)
-        stateVector[1] = yPos + linearVel * np.sin(theta) * deltaT + (1/2) * (linearAccel - linearBias) * np.sin(theta) * (deltaT ** 2)
-        stateVector[2] = theta + angularVel * deltaT
-        stateVector[3] = linearVel + (linearAccel - linearBias) * deltaT
-        stateVector[4] = angularVel
-        
-        # stateVector values 5 and 6 are not updated in this prediction phase. They are updated during the propagation of error in correction phase.
+        self.stateVector[0] = xPos + linearVel * np.cos(theta) * deltaT + (1/2) * (linearAccel - linearBias) * np.cos(theta) * (deltaT ** 2)
+        self.stateVector[1] = yPos + linearVel * np.sin(theta) * deltaT + (1/2) * (linearAccel - linearBias) * np.sin(theta) * (deltaT ** 2)
+        self.stateVector[2] = theta + angularVel * deltaT
+        self.stateVector[3] = linearVel + (linearAccel - linearBias) * deltaT
+        self.stateVector[4] = angularVel
+        # self.stateVector values 5 and 6 are not updated in this prediction phase. They are updated during the propagation of error in correction phase.
+
+        F = self.calculateF(deltaT, linearAccel)
+        self.covarianceMatrix = F @ self.covarianceMatrix @ F.T + self.sensorNoiseMatrix
 
         msg = Float64MultiArray()
-        msg.data = stateVector.flatten().tolist()
+        msg.data = self.stateVector.flatten().tolist()
         print("WE SHOUDL HAVE PUBLISHED")
         print("XPOS TO SEE CHANGING: ", xPos)
 
-        self.publisher.publish(msg)
+        self.prediction_publisher.publish(msg)
         self.startTime = time.perf_counter()
         self.newOdom = 0
+
+    def correctStateVector(self, message):
+        lidarVector = []
+        lidarUncertainty = [[], [], []]
+        
+        for i, number in message:
+            if i < 3:
+                lidarVector.append(number)
+                continue
+
+            lidarUncertainty[(i % 3) - 1].append(number)
+
+        residualVector = lidarVector - self.stateVector
+
+        innovationCovariance = lidarUncertainty @ self.covarianceMatrix @ lidarUncertainty.T + residualVector
+        
+        kalmanGain = self.covarianceMatrix * lidarUncertainty.T * np.linalg.inv(innovationCovariance)
+
+        self.stateVector = self.stateVector + kalmanGain @ residualVector
+        self.covarianceMatrix = (np.identity(7) - kalmanGain @ lidarUncertainty) @ self.covarianceMatrix @ (np.identity(7) - kalmanGain @ lidarUncertainty).T + kalmanGain @ residualVector @ kalmanGain.T
+
+        msg = Float64MultiArray()
+        msg.data = self.stateVector.flatten().tolist()
+
+        self.corrected_publisher.publish(msg)
 
 def main(args = None):
     rclpy.init(args=args)
 
-    newNode = EKF_Prediction()
+    newNode = EKF()
 
     rclpy.spin(newNode)
 

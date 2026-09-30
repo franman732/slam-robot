@@ -29,7 +29,8 @@ setup(
             'EKF_prototype = my_slam.EKF_prototype:main',
             'get_gyro_biases = my_slam.get_gyro_biases:main',
             'construct_voxel_grid = my_slam.construct_voxel_grid:main',
-            'visualization = my_slam.visualization:main'
+            'visualization = my_slam.visualization:main',
+            'map_matching = my_slam.map_matching:main'
         ],
     },
 )

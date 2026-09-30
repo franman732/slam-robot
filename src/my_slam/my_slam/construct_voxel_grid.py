@@ -33,7 +33,7 @@ class createVoxelGrid(Node):
 
         self.EKF_subscriber = self.create_subscription (
             Float64MultiArray,
-            '/prediction',
+            '/corrected',
             self.updateStateVector,
             1
         )
@@ -48,10 +48,10 @@ class createVoxelGrid(Node):
         self.stateVector = np.array(message.data)
 
     def updateLidarScan(self, message):
-        if self.lidarMessage == None:
+        if self.lidarMessage != None:
             self.constructGrid(self.lidarMessage)
         
-        self.lidarMessage = message.data 
+        self.lidarMessage = message
 
     def constructGrid(self, message):
         for i, range in enumerate(message.ranges):
