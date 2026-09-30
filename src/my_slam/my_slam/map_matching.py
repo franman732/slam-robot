@@ -11,6 +11,7 @@ from slam_messages.msg import Voxel
 class scanMatching(Node):
     def __init__(self):
         self.stateVector = None
+        self.updatedVector = None
         self.voxelDict = {}
         self.voxelSize = 20
 
@@ -41,6 +42,12 @@ class scanMatching(Node):
             VoxelGrid,
             '/NDTVoxelMap',
             self.updateVoxel,
+            1
+        )
+
+        self.correctionPublisher = self.create_publisher (
+            Float64MultiArray,
+            '/correction',
             1
         )
 
@@ -75,6 +82,7 @@ class scanMatching(Node):
         if self.voxelDict != {}:
             deltaPos = np.array([100, 100, 100])
             iterationCount = 0
+            storageList = []
 
             while np.linalg.norm(deltaPos) > 0.001 and iterationCount < 100:
                 robotPosVect = [self.stateVector[0], self.stateVector[1]]
@@ -130,6 +138,14 @@ class scanMatching(Node):
                 self.stateVector = updatedVector
                 iterationCount += 1
 
+            print("WE HAVE EXITED LOOP")
+
+            storageList.append(self.stateVector.flatten())
+            storageList.append(Hessian.flatten())
+
+            msg = Float64MultiArray()
+            msg.data = storageList
+            self.correctionPublisher.publish(msg)
                 
 
 
