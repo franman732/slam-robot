@@ -15,7 +15,7 @@ class scanMatching(Node):
         self.stateVector = None
         self.updatedVector = None
         self.voxelDict = {}
-        self.voxelSize = 20
+        self.voxelSize = .20
         self.lambdaRegress = 1e-4
 
         """stateVector:
@@ -83,11 +83,12 @@ class scanMatching(Node):
 
     def createPosEstimate(self, message):
         if self.voxelDict != {} and self.stateVector is not None:
-            deltaPos = np.array([100, 100, 100])
+            deltaPos = np.array([0, 0, 0])
             iterationCount = 0
             storageList = []
+            keepUpdating = True
 
-            while np.linalg.norm(deltaPos) > 0.001 and iterationCount < 100:
+            while keepUpdating and iterationCount < 100:
                 robotPosVect = np.array([self.stateVector[0], self.stateVector[1]])
                 totalError = 0
                 gradient = np.zeros(3)
@@ -100,21 +101,32 @@ class scanMatching(Node):
                     angle = message.angle_min + i * message.angle_increment # This is the number, in radians, my lidar says it angle increases by each increment.
 
                     changePosVect = np.array([lidarRange * np.cos(angle), lidarRange * np.sin(angle)])
+                    #print("CHANGEPOSVECT: ", changePosVect)
 
-                    truePosVect =[[np.cos(self.stateVector[2]), -np.sin(self.stateVector[2])], [np.sin(self.stateVector[2]), np.cos(self.stateVector[2])]] @ changePosVect + robotPosVect # True position represented as a vector.
+                    truePosVect = [[np.cos(self.stateVector[2]), -np.sin(self.stateVector[2])], [np.sin(self.stateVector[2]), np.cos(self.stateVector[2])]] @ changePosVect + robotPosVect # True position represented as a vector.
+
+                    #print("TRUE POS VECT: ", truePosVect)
 
                     voxelX = truePosVect[0] // self.voxelSize
                     voxelY = truePosVect[1] // self.voxelSize
 
-                    voxel = self.voxelDict.get((voxelX, voxelY))
+                    voxel = self.voxelDict.get((voxelX, voxelY), None)
 
                     if voxel is None:
+                        #print("VOXEL X: ", voxelX, "VOXEL Y: ", voxelY)
+                        #print("DICT START: ")
+                        #print("VOXEL DICT: ", self.voxelDict.items())
                         continue
-                    
-                    A = np.linalg.inv([[voxel.x_var, voxel.xy_cov],
-                                         [voxel.xy_cov, voxel.y_var]])
 
-                    mean = np.array([voxel.x_mean, voxel.y_mean])
+                    #print("WE PASSED VOXEL ERROR")
+                    #print("VOXEL: ", voxel)
+
+                    covarianceMatrix = voxel[1]
+                    covarianceMatrixReg = covarianceMatrix + np.eye(2) * 1e-4
+                    
+                    A = np.linalg.inv(covarianceMatrixReg)
+
+                    mean = voxel[0]
 
                     posDiffVect = truePosVect - mean
 
@@ -123,8 +135,10 @@ class scanMatching(Node):
                     error = math.exp(-distance / 2)
                     totalError += error
 
+                    #print("TOTAL ERROR: ---------------", totalError)
+
                     J = self.calculateJ(changePosVect[0], changePosVect[1], self.stateVector[2])
-                    h = self.calculate_h(changePosVect[0], changePosVect[1], self.stateVector[2])
+                    h = self.calculateH(changePosVect[0], changePosVect[1], self.stateVector[2])
                     S = self.calculateS(J, A, truePosVect, mean)
                     K = self.calculateK(h, A, truePosVect, mean)
                     Q = self.calculateQ(J, A, K)
@@ -136,17 +150,22 @@ class scanMatching(Node):
 
                 try:
                     deltaPos = -np.linalg.solve(Hessian_reg, gradient)
-                except np.linalg.LinAlgError:
+                except:
                     print("Hessian is still singular! Skipping optimization loop.")
                     break # or continue/handle gracefully
                 
                 updatedVector = self.stateVector + np.append(deltaPos, [0, 0, 0, 0])
                 
-                print("UPDATED VECTOR: ", updatedVector)
-                print("PREVIOUS VECTOR: ", self.stateVector)
+                print("PREVIOUS X: ", self.stateVector[0])
+                print("NEW X: ", updatedVector[0])
+                print("ERROR: ", totalError)
+                print("-----------------------------------------------------------")
                 
                 self.stateVector = updatedVector
                 iterationCount += 1
+
+                if deltaPos < 0.001:
+                    keepUpdating = False
 
             print("WE HAVE EXITED LOOP")
 

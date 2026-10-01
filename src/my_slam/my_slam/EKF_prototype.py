@@ -28,6 +28,12 @@ class EKF(Node):
                             0.01**2                  # angular bias variance
                         ])
 
+        self.HMatrix = np.array([
+                        [1, 0, 0, 0, 0, 0, 0],
+                        [0, 1, 0, 0, 0, 0, 0],
+                        [0, 0, 1, 0, 0, 0, 0]
+                    ])
+
         self.sensorNoiseMatrix = np.diag([0, 0, 0, 0, 0, 0, 0])
 
         self.newOdom = 0
@@ -47,6 +53,13 @@ class EKF(Node):
             Odometry,
             '/odom',
             self.updateOdom,
+            1
+        )
+
+        self.NDTSubscriber = self.create_subscription(
+            Float64MultiArray,
+            '/correction',
+            self.correctStateVector,
             1
         )
 
@@ -150,6 +163,11 @@ class EKF(Node):
 
         # Makes linearVel either the stored state velocity, or the velocity outputted by the odometry if there is a new velocity available.
         linearVel = (stateLinearVel * abs(self.newOdom - 1) + self.newOdom * self.odomVel)
+
+        if self.odomVel < 0.001 and self.newOdom == 1:
+            # We are definitively stopped. Kill the velocity and ignore noisy acceleration.
+            linearVel = 0
+            linearAccel = linearBias # Zero out the effective acceleration
         
         if self.odomVel > 0.001:
             angularVel = angularVel + 0.2 * (self.odomAngVel - angularVel) * self.newOdom - angularBias
@@ -168,37 +186,47 @@ class EKF(Node):
 
         msg = Float64MultiArray()
         msg.data = self.stateVector.flatten().tolist()
-        print("WE SHOUDL HAVE PUBLISHED")
-        print("XPOS TO SEE CHANGING: ", xPos)
+        print("predicted: ", self.stateVector[0])
 
         self.prediction_publisher.publish(msg)
         self.startTime = time.perf_counter()
         self.newOdom = 0
 
     def correctStateVector(self, message):
-        lidarVector = []
+        lidarVector = np.zeros(7) 
         lidarUncertainty = [[], [], []]
+        counter = 0
+        uncertaintyCounter = 0
         
-        for i, number in message:
-            if i < 3:
-                lidarVector.append(number)
-                continue
-
-            lidarUncertainty[(i % 3) - 1].append(number)
-
-        residualVector = lidarVector - self.stateVector
-
-        innovationCovariance = lidarUncertainty @ self.covarianceMatrix @ lidarUncertainty.T + residualVector
+        # Convert the incoming message directly into a numpy array
+        data_array = np.array(message.data)
         
-        kalmanGain = self.covarianceMatrix * lidarUncertainty.T * np.linalg.inv(innovationCovariance)
+        # Slice the first 7 elements for the state vector
+        lidarVector = data_array[:7]
+        
+        # Slice the remaining 9 elements and reshape them back into a 3x3 matrix
+        lidarUncertainty = data_array[7:16].reshape((3, 3))
 
-        self.stateVector = self.stateVector + kalmanGain @ residualVector
-        self.covarianceMatrix = (np.identity(7) - kalmanGain @ lidarUncertainty) @ self.covarianceMatrix @ (np.identity(7) - kalmanGain @ lidarUncertainty).T + kalmanGain @ residualVector @ kalmanGain.T
+        print("LIDARVECTOR: ", lidarVector)
+        print("IDAR UNCERTAINTY: ", lidarUncertainty)
+
+        residualVector = lidarVector[:3] - self.stateVector[:3]
+
+        innovationCovariance = self.HMatrix @ self.covarianceMatrix @ self.HMatrix.T + lidarUncertainty
+        
+        kalmanGain = self.covarianceMatrix @ self.HMatrix.T @ np.linalg.inv(innovationCovariance)
+
+        print("KALMAN GAIN: ", kalmanGain)
+        print("RESIDUAL VECTOR: ", residualVector)
+
+        self.stateVector = self.stateVector.T + kalmanGain @ residualVector.T
+        self.covarianceMatrix = (np.identity(7) - kalmanGain @ self.HMatrix) @ self.covarianceMatrix @ (np.identity(7) - kalmanGain @ self.HMatrix).T + kalmanGain @ lidarUncertainty @ kalmanGain.T
 
         msg = Float64MultiArray()
         msg.data = self.stateVector.flatten().tolist()
 
         self.corrected_publisher.publish(msg)
+        print("CORRECTED: ", self.stateVector[0])
 
 def main(args = None):
     rclpy.init(args=args)

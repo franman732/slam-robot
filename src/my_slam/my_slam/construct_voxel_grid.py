@@ -62,9 +62,10 @@ class createVoxelGrid(Node):
 
             relativeX = range * np.cos(angle)
             relativeY = range * np.sin(angle)
+            theta = self.stateVector[2]
 
-            mapX = relativeX + self.stateVector[0]
-            mapY = relativeY + self.stateVector[1]
+            mapX = relativeX * np.cos(theta) - relativeX * np.sin(theta) + self.stateVector[0]
+            mapY = relativeY * np.sin(theta) + relativeY * np.cos(theta) + self.stateVector[1]
 
             voxelX = mapX // .20 # X input for dictionary
             voxelY = mapY // .20 # Y input for dictionary
