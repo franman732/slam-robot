@@ -164,7 +164,7 @@ class scanMatching(Node):
                 self.stateVector = updatedVector
                 iterationCount += 1
 
-                if deltaPos < 0.001:
+                if np.linalg.norm(deltaPos) < 0.001:
                     keepUpdating = False
 
             print("WE HAVE EXITED LOOP")
