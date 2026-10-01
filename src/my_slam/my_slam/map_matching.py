@@ -88,6 +88,9 @@ class scanMatching(Node):
             storageList = []
             keepUpdating = True
 
+            totalVoxels = 0
+            hitVoxels = 0
+
             while keepUpdating and iterationCount < 100:
                 robotPosVect = np.array([self.stateVector[0], self.stateVector[1]])
                 totalError = 0
@@ -112,11 +115,15 @@ class scanMatching(Node):
 
                     voxel = self.voxelDict.get((voxelX, voxelY), None)
 
+                    totalVoxels += 1
+
                     if voxel is None:
                         #print("VOXEL X: ", voxelX, "VOXEL Y: ", voxelY)
                         #print("DICT START: ")
                         #print("VOXEL DICT: ", self.voxelDict.items())
                         continue
+
+                    hitVoxels += 1
 
                     #print("WE PASSED VOXEL ERROR")
                     #print("VOXEL: ", voxel)
@@ -160,6 +167,9 @@ class scanMatching(Node):
                 print("NEW X: ", updatedVector[0])
                 print("ERROR: ", totalError)
                 print("-----------------------------------------------------------")
+                print("HITVOXELS: ", hitVoxels)
+                print("TOTALVOXELS: ", totalVoxels)
+                print("------------------------------------------------------------")
                 
                 self.stateVector = updatedVector
                 iterationCount += 1

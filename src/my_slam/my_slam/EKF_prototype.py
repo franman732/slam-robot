@@ -33,8 +33,16 @@ class EKF(Node):
                         [0, 1, 0, 0, 0, 0, 0],
                         [0, 0, 1, 0, 0, 0, 0]
                     ])
-
-        self.sensorNoiseMatrix = np.diag([0, 0, 0, 0, 0, 0, 0])
+        
+        self.sensorNoiseMatrix = np.diag([
+            0.005**2,           # x process uncertainty
+            0.005**2,           # y process uncertainty
+            np.deg2rad(0.2)**2, # theta process uncertainty
+            0.02**2,            # velocity uncertainty
+            0.02**2,            # angular velocity uncertainty
+            1e-5**2,            # linear bias random walk
+            1e-5**2             # angular bias random walk
+        ])
 
         self.newOdom = 0
         self.odomVel = 0
@@ -58,7 +66,7 @@ class EKF(Node):
 
         self.NDTSubscriber = self.create_subscription(
             Float64MultiArray,
-            '/correction',
+            '/correction_asdf',
             self.correctStateVector,
             1
         )
