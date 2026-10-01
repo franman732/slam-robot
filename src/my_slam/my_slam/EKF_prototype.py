@@ -66,7 +66,7 @@ class EKF(Node):
 
         self.NDTSubscriber = self.create_subscription(
             Float64MultiArray,
-            '/correction_asdf',
+            '/correction',
             self.correctStateVector,
             1
         )

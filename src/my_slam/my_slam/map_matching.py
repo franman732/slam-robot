@@ -17,6 +17,8 @@ class scanMatching(Node):
         self.voxelDict = {}
         self.voxelSize = .20
         self.lambdaRegress = 1e-4
+        self.maxTranslation = 0.05
+        self.maxRotation = 0.05
 
         """stateVector:
             np.array([0,  x position
@@ -88,14 +90,12 @@ class scanMatching(Node):
             storageList = []
             keepUpdating = True
 
-            totalVoxels = 0
-            hitVoxels = 0
-
             while keepUpdating and iterationCount < 100:
                 robotPosVect = np.array([self.stateVector[0], self.stateVector[1]])
                 totalError = 0
                 gradient = np.zeros(3)
                 Hessian =  np.zeros((3, 3))
+                totalNodes = 0
 
                 for i, lidarRange in enumerate(message.ranges):
                     if lidarRange > 20:
@@ -115,15 +115,13 @@ class scanMatching(Node):
 
                     voxel = self.voxelDict.get((voxelX, voxelY), None)
 
-                    totalVoxels += 1
-
                     if voxel is None:
                         #print("VOXEL X: ", voxelX, "VOXEL Y: ", voxelY)
                         #print("DICT START: ")
                         #print("VOXEL DICT: ", self.voxelDict.items())
                         continue
 
-                    hitVoxels += 1
+                    totalNodes += 1
 
                     #print("WE PASSED VOXEL ERROR")
                     #print("VOXEL: ", voxel)
@@ -153,23 +151,59 @@ class scanMatching(Node):
                     gradient += error * S
                     Hessian += error * (Q - np.outer(S, S))
 
-                Hessian_reg = Hessian + self.lambdaRegress * np.eye(3)
+                print("PRE UPDATE HESSIAN: ", Hessian)
+                print("PRE UPDATE GRADIENT: ", gradient)
+                print("NUM OF NODES: ", totalNodes)
+                print("------------------------------------------------------------")
+
+                gradientNorm = gradient / totalNodes
+                hessianNorm = Hessian / totalNodes  
+
+                Hessian_reg = hessianNorm + self.lambdaRegress * np.eye(3)
+
+                eigenvalues = np.linalg.eigvalsh(Hessian_reg)
+                condition = np.linalg.cond(Hessian_reg)
+
+                print("EIGENVALUES:", eigenvalues)
+                print("CONDITION:", condition)
+
+                if condition > 100:
+                    print("NDT Hessian is poorly conditioned. Rejecting update.")
+                    break
 
                 try:
-                    deltaPos = -np.linalg.solve(Hessian_reg, gradient)
+                    deltaPos = -np.linalg.solve(Hessian_reg, gradientNorm)
                 except:
                     print("Hessian is still singular! Skipping optimization loop.")
                     break # or continue/handle gracefully
+
+                """print("RAW DELTA:", deltaPos)
+                print("RAW TRANSLATION:", np.linalg.norm(deltaPos[:2]))
+
+                print("------------------------------------------------------------")
+                print("POST UPDATE HESSIAN: ", Hessian_reg)
+                print("POST UPDATE GRADIENT: ", gradientNorm)
+                print("-----------------------------------------------------------")"""
+
+                translation_norm = np.linalg.norm(deltaPos[:2])
+
+                if translation_norm > self.maxTranslation:
+                    deltaPos[:2] *= self.maxTranslation / translation_norm
+
+                deltaPos[2] = np.clip(deltaPos[2],
+                                    -self.maxRotation,
+                                    self.maxRotation)
                 
                 updatedVector = self.stateVector + np.append(deltaPos, [0, 0, 0, 0])
                 
                 print("PREVIOUS X: ", self.stateVector[0])
                 print("NEW X: ", updatedVector[0])
-                print("ERROR: ", totalError)
+                """print("ERROR: ", totalError)
                 print("-----------------------------------------------------------")
-                print("HITVOXELS: ", hitVoxels)
-                print("TOTALVOXELS: ", totalVoxels)
-                print("------------------------------------------------------------")
+                print("HESSIAN: ", hessianNorm)
+                print("-----------------------------------------------------------")
+                print("GRADIENT: ", gradientNorm)
+                print("-----------------------------------------------------------")"""
                 
                 self.stateVector = updatedVector
                 iterationCount += 1
