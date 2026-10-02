@@ -19,13 +19,13 @@ class EKF(Node):
                         -1.28 * 10 ** - 7]) # angular bias 6       These values are updated later using the covariance and noise matrixes when we do correction phase.
 
         self.covarianceMatrix = np.diag([
-                            0.01**2,                 # x variance
-                            0.01**2,                 # y variance
-                            np.deg2rad(1)**2,        # theta variance
-                            0.05**2,                 # velocity variance
-                            0.05**2,                 # angular velocity variance
-                            0.01**2,                 # linear bias variance
-                            0.01**2                  # angular bias variance
+                            0.05**2,                 # x variance
+                            0.05**2,                 # y variance
+                            np.deg2rad(4)**2,        # theta variance
+                            0.08**2,                 # velocity variance
+                            0.08**2,                 # angular velocity variance
+                            0.015**2,                 # linear bias variance
+                            0.015**2                  # angular bias variance
                         ])
 
         self.HMatrix = np.array([
