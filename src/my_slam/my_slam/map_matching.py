@@ -167,8 +167,24 @@ class scanMatching(Node):
                 print("EIGENVALUES:", eigenvalues)
                 print("CONDITION:", condition)
 
+                if not np.all(np.isfinite(Hessian_reg)):
+                    print("NDT REJECTED: invalid Hessian")
+                    break
+
+                if not np.all(np.isfinite(gradientNorm)):
+                    print("NDT REJECTED: invalid gradient")
+                    break
+
+                if totalNodes < 50:
+                    print("NDT REJECTED: too few points")
+                    break
+
+                if np.min(eigenvalues) <= 0:
+                    print("NDT REJECTED: Hessian not positive definite")
+                    break
+
                 if condition > 100:
-                    print("NDT Hessian is poorly conditioned. Rejecting update.")
+                    print("NDT REJECTED: Hessian poorly conditioned")
                     break
 
                 try:
@@ -186,13 +202,19 @@ class scanMatching(Node):
                 print("-----------------------------------------------------------")"""
 
                 translation_norm = np.linalg.norm(deltaPos[:2])
+                rotation_norm = abs(deltaPos[2])
+
+                if not np.all(np.isfinite(deltaPos)):
+                    print("NDT REJECTED: invalid delta")
+                    break
 
                 if translation_norm > self.maxTranslation:
-                    deltaPos[:2] *= self.maxTranslation / translation_norm
+                    print("NDT REJECTED: translation step too large")
+                    break
 
-                deltaPos[2] = np.clip(deltaPos[2],
-                                    -self.maxRotation,
-                                    self.maxRotation)
+                if rotation_norm > self.maxRotation:
+                    print("NDT REJECTED: rotation step too large")
+                    break
                 
                 updatedVector = self.stateVector + np.append(deltaPos, [0, 0, 0, 0])
                 
