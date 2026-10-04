@@ -151,7 +151,7 @@ class EKF(Node):
 
         return W
 
-    def calcluateQ(self, deltaT, theta):
+    def calculateQ(self, deltaT, theta):
         W = self.constructW()
 
         gLin = [(1/2) * np.cos(theta) * deltaT ** 2, (1/2) * np.sin(theta) * deltaT ** 2, 0, deltaT, 0, 1, 1]
@@ -174,6 +174,7 @@ class EKF(Node):
         yPos = self.stateVector[1]
         theta = self.stateVector[2]
         stateLinearVel = self.stateVector[3]
+        stateAngularVel = self.stateVector[4]
         linearBias = self.stateVector[5]
         angularBias = self.stateVector[6]
 
@@ -185,8 +186,8 @@ class EKF(Node):
             linearVel = 0
             linearAccel = linearBias # Zero out the effective acceleration
         
-        if self.odomVel > 0.001:
-            angularVel = angularVel + 0.2 * (self.odomAngVel - angularVel) * self.newOdom - angularBias
+        if self.odomAngVel > 0.001:
+            angularVel = (stateAngularVel * abs(self.newOdom - 1) + self.newOdom * self.odomAngVel - angularBias)
         else:
             angularVel = angularVel - angularBias
 
@@ -198,13 +199,15 @@ class EKF(Node):
         # self.stateVector values 5 and 6 are not updated in this prediction phase. They are updated during the propagation of error in correction phase.
 
         F = self.calculateF(deltaT, linearAccel)
-        Q = self.calculateQ(deltaT, theta)
+        Q = self.sensorNoiseMatrix #self.calculateQ(deltaT, theta)
 
         self.covarianceMatrix = F @ self.covarianceMatrix @ F.T + Q
 
         msg = Float64MultiArray()
         msg.data = self.stateVector.flatten().tolist()
-        print("predicted: ", self.stateVector[0])
+        print("predicted X: ", self.stateVector[0])
+        print("Predicted Y: ", self.stateVector[1])
+        print("Preidcted Rotation: ", self.stateVector[2])
 
         self.prediction_publisher.publish(msg)
         self.startTime = time.perf_counter()
@@ -225,8 +228,8 @@ class EKF(Node):
         # Slice the remaining 9 elements and reshape them back into a 3x3 matrix
         lidarUncertainty = data_array[7:16].reshape((3, 3))
 
-        print("LIDARVECTOR: ", lidarVector)
-        print("IDAR UNCERTAINTY: ", lidarUncertainty)
+        #print("LIDARVECTOR: ", lidarVector)
+        #print("IDAR UNCERTAINTY: ", lidarUncertainty)
 
         residualVector = lidarVector[:3] - self.stateVector[:3]
 
@@ -234,8 +237,8 @@ class EKF(Node):
         
         kalmanGain = self.covarianceMatrix @ self.HMatrix.T @ np.linalg.inv(innovationCovariance)
 
-        print("KALMAN GAIN: ", kalmanGain)
-        print("RESIDUAL VECTOR: ", residualVector)
+        #print("KALMAN GAIN: ", kalmanGain)
+        #print("RESIDUAL VECTOR: ", residualVector)
 
         self.stateVector = self.stateVector.T + kalmanGain @ residualVector.T
         self.covarianceMatrix = (np.identity(7) - kalmanGain @ self.HMatrix) @ self.covarianceMatrix @ (np.identity(7) - kalmanGain @ self.HMatrix).T + kalmanGain @ lidarUncertainty @ kalmanGain.T
@@ -244,7 +247,9 @@ class EKF(Node):
         msg.data = self.stateVector.flatten().tolist()
 
         self.corrected_publisher.publish(msg)
-        print("CORRECTED: ", self.stateVector[0])
+        print("CORRECTED x: ", self.stateVector[0])
+        print("corrected y: ", self.stateVector[1])
+        print("corrected rotation: ", self.stateVector[2])  
 
 def main(args = None):
     rclpy.init(args=args)
