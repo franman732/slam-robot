@@ -23,6 +23,7 @@ class createVoxelGrid(Node):
 
         self.finalVoxelDict = {} # hash (x, y) --> x, y, mean vector, covarianceMatrix
         self.infoDict = {} # hash (x, y) --> total # of elements, mean vector, product matrix 
+        self.lidarOffset = np.array([-0.032, 0.0])
 
         self.lidar_subscriber = self.create_subscription (
             LaserScan,
@@ -62,10 +63,14 @@ class createVoxelGrid(Node):
 
             relativeX = range * np.cos(angle)
             relativeY = range * np.sin(angle)
+
+            baseX = relativeX + self.lidarOffset[0]
+            baseY = relativeY + self.lidarOffset[1]
+
             theta = self.stateVector[2]
 
-            mapX = relativeX * np.cos(theta) - relativeY * np.sin(theta) + self.stateVector[0]
-            mapY = relativeX * np.sin(theta) + relativeY * np.cos(theta) + self.stateVector[1]
+            mapX = baseX * np.cos(theta) - baseY * np.sin(theta) + self.stateVector[0]
+            mapY = baseX * np.sin(theta) + baseY * np.cos(theta) + self.stateVector[1]
 
             voxelX = mapX // .20 # X input for dictionary
             voxelY = mapY // .20 # Y input for dictionary

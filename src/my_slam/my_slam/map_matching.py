@@ -19,6 +19,7 @@ class scanMatching(Node):
         self.lambdaRegress = 1e-4
         self.maxTranslation = 0.05
         self.maxRotation = 0.05
+        self.lidarOffset = np.array([-0.032, 0.0])
 
         """stateVector:
             np.array([0,  x position
@@ -106,7 +107,9 @@ class scanMatching(Node):
                     changePosVect = np.array([lidarRange * np.cos(angle), lidarRange * np.sin(angle)])
                     #print("CHANGEPOSVECT: ", changePosVect)
 
-                    truePosVect = [[np.cos(self.stateVector[2]), -np.sin(self.stateVector[2])], [np.sin(self.stateVector[2]), np.cos(self.stateVector[2])]] @ changePosVect + robotPosVect # True position represented as a vector.
+                    basePoint = changePosVect + self.lidarOffset
+
+                    truePosVect = [[np.cos(self.stateVector[2]), -np.sin(self.stateVector[2])], [np.sin(self.stateVector[2]), np.cos(self.stateVector[2])]] @ basePoint + robotPosVect # True position represented as a vector.
 
                     #print("TRUE POS VECT: ", truePosVect)
 
@@ -142,8 +145,8 @@ class scanMatching(Node):
 
                     #print("TOTAL ERROR: ---------------", totalError)
 
-                    J = self.calculateJ(changePosVect[0], changePosVect[1], self.stateVector[2])
-                    h = self.calculateH(changePosVect[0], changePosVect[1], self.stateVector[2])
+                    J = self.calculateJ(basePoint[0], basePoint[1], self.stateVector[2])
+                    h = self.calculateH(basePoint[0], basePoint[1], self.stateVector[2])
                     S = self.calculateS(J, A, truePosVect, mean)
                     K = self.calculateK(h, A, truePosVect, mean)
                     Q = self.calculateQ(J, A, K)
@@ -155,6 +158,10 @@ class scanMatching(Node):
                 print("PRE UPDATE GRADIENT: ", gradient)
                 print("NUM OF NODES: ", totalNodes)
                 print("------------------------------------------------------------")
+
+                if totalNodes < 50:
+                    print("NDT REJECTED: too few points")
+                    break
 
                 gradientNorm = gradient / totalNodes
                 hessianNorm = Hessian / totalNodes  
@@ -173,10 +180,6 @@ class scanMatching(Node):
 
                 if not np.all(np.isfinite(gradientNorm)):
                     print("NDT REJECTED: invalid gradient")
-                    break
-
-                if totalNodes < 50:
-                    print("NDT REJECTED: too few points")
                     break
 
                 if np.min(eigenvalues) <= 0:
@@ -258,8 +261,3 @@ def main(args = None):
 if __name__ == "__main__":
     print("WE RUNNING MAP MATCHING!")
     main()
-
-
-
-
-

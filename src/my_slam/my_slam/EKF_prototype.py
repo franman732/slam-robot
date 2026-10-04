@@ -1,6 +1,7 @@
 import rclpy
 import time
 import numpy as np
+import random
 
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
@@ -19,13 +20,13 @@ class EKF(Node):
                         -1.28 * 10 ** - 7]) # angular bias 6       These values are updated later using the covariance and noise matrixes when we do correction phase.
 
         self.covarianceMatrix = np.diag([
-                            0.1**2,                 # x variance
-                            0.1**2,                 # y variance
-                            np.deg2rad(2)**2,        # theta variance
-                            0.1**2,                 # velocity variance
-                            0.1**2,                 # angular velocity variance
-                            0.02**2,                 # linear bias variance
-                            0.02**2                  # angular bias variance
+                            0.12**2,                 # x variance
+                            0.12**2,                 # y variance
+                            np.deg2rad(3.5)**2,        # theta variance
+                            0.12**2,                 # velocity variance
+                            0.12**2,                 # angular velocity variance
+                            0.025**2,                 # linear bias variance
+                            0.025**2                  # angular bias variance
                         ])
 
         self.HMatrix = np.array([
@@ -35,11 +36,11 @@ class EKF(Node):
                     ])
         
         self.sensorNoiseMatrix = np.diag([
-            0.005**2,           # x process uncertainty
-            0.005**2,           # y process uncertainty
-            np.deg2rad(0.2)**2, # theta process uncertainty
-            0.02**2,            # velocity uncertainty
-            0.02**2,            # angular velocity uncertainty
+            0.018**2,           # x process uncertainty
+            0.018**2,           # y process uncertainty
+            np.deg2rad(0.38)**2, # theta process uncertainty
+            0.05**2,            # velocity uncertainty
+            0.05**2,            # angular velocity uncertainty
             1e-5**2,            # linear bias random walk
             1e-5**2             # angular bias random walk
         ])
@@ -100,7 +101,8 @@ class EKF(Node):
 
     def calculateF(self, deltaT, linAcc):
         theta = self.stateVector[2]
-        linVelocity = self.stateVector[3]
+        stateLinearVel = self.stateVector[3]
+        linVelocity = (stateLinearVel * abs(self.newOdom - 1) + self.newOdom * self.odomVel)
         accBias = self.stateVector[5]
         
         F = np.array([[1, 
@@ -119,47 +121,53 @@ class EKF(Node):
               -(1/2) * np.sin(theta) * (deltaT ** 2),
               0],
 
-             [0,
-              0,
-              1,
-              0,
-              deltaT,
-              0,
-              -deltaT],
+             [0, 0, 1, 0, deltaT, 0, -deltaT],
 
-             [0,
-              0,
-              0,
-              1,
-              0,
-              -deltaT,
-              0],
+             [0, 0, 0, 1, 0, -deltaT, 0],
 
-             [0,
-              0,
-              0,
-              0,
-              1,
-              0,
-              -deltaT],
+             [0, 0, 0, 0, 1, 0, -deltaT],
 
-             [0,
-              0,
-              0,
-              0,
-              0,
-              1,
-              0],
+             [0, 0, 0, 0, 0, 1, 0],
 
-             [0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              1]])
+             [0, 0, 0, 0, 0, 0, 1]])
         
         return F
+
+    def constructW(self): 
+        maxWalk = 1e-5**2
+
+        aWalk = random.gauss(0, 1) * maxWalk
+        wWalk = random.gauss(0, 1) * maxWalk
+
+        W = np.diag([
+            0.01**2,           # x process uncertainty
+            0.01**2,           # y process uncertainty
+            np.deg2rad(0.15)**2, # theta process uncertainty
+            0.02**2,            # velocity uncertainty
+            0.02**2,            # angular velocity uncertainty
+            maxWalk ** 2,       # Linear bias
+            maxWalk ** 2        # Angular bias
+        ])
+
+        return W
+
+    def calcluateQ(self, deltaT, theta):
+        W = self.constructW()
+
+        gLin = [(1/2) * np.cos(theta) * deltaT ** 2, (1/2) * np.sin(theta) * deltaT ** 2, 0, deltaT, 0, 1, 1]
+        gAng = [0, 0, deltaT, 0, 0, 1, 1]
+
+        qLin = np.outer(gLin, gLin.T) @ W 
+        qAng = np.outer(gAng, gAng.T) @ W
+        
+        if self.newOdom:
+            gOdom = [np.cos(theta) * deltaT, np.sin(theta) * deltaT, 0, 1, 0, 1, 1]
+            qOdom = np.outer(gOdom, gOdom.T) @ W
+
+            return qOdom + qLin + qAng
+
+        else: 
+            return qLin + qAng
 
     def updateStateVector(self, deltaT, angularVel, linearAccel): # accelerations come from IMU, and angular velocity comes from IMU
         xPos = self.stateVector[0]
@@ -190,7 +198,9 @@ class EKF(Node):
         # self.stateVector values 5 and 6 are not updated in this prediction phase. They are updated during the propagation of error in correction phase.
 
         F = self.calculateF(deltaT, linearAccel)
-        self.covarianceMatrix = F @ self.covarianceMatrix @ F.T + self.sensorNoiseMatrix
+        Q = self.calculateQ(deltaT, theta)
+
+        self.covarianceMatrix = F @ self.covarianceMatrix @ F.T + Q
 
         msg = Float64MultiArray()
         msg.data = self.stateVector.flatten().tolist()

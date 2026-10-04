@@ -1,27 +1,78 @@
-import os
 from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import Node
+import os
+from launch.actions import TimerAction
 
 def generate_launch_description():
-    # 1. Define the main Turtlesim simulation node
-    turtlesim_node = Node(
-        package='turtlesim',
-        executable='turtlesim_node',
-        name='sim_node',
+    gazebo_launch = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(
+                    get_package_share_directory('turtlebot3_gazebo'),
+                    'launch',
+                    'turtlebot3_world.launch.py'
+                )
+            )
+        )
+    
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz_node',
         output='screen'
     )
 
-    # 2. Define the Keyboard Teleop node to run at the same time
-    teleop_node = Node(
-        package='turtlesim',
-        executable='turtle_teleop_key',
-        name='teleop_node',
-        output='screen',
-        prefix='xterm -e'  # Opens this node in a separate terminal window so it can capture keyboard inputs
+    EKF_Node = Node(
+        package='my_slam',
+        executable='EKF_prototype',
+        name='EKF',
+        output='screen'
     )
+
+    PID_node = Node(
+        package='my_slam',
+        executable='PID_Node',
+        name='PID_Node',
+        output='screen'
+    )
+
+    voxel_construction_node = Node(
+        package='my_slam',
+        executable='construct_voxel_grid',
+        name='voxel_grid',
+        output='screen'
+    )
+
+    map_matching_node = Node(
+        package='my_slam',
+        executable='map_matching',
+        name='mapMatching',
+        output='screen'
+    )
+
+    visualization_node = Node(
+        package='my_slam',
+        executable='visualization',
+        name='visualization_Node',
+        output='screen'
+    )
+
+    other_nodes = TimerAction(
+        period=3.0,
+        actions=[
+            rviz_node,
+            EKF_Node,
+            voxel_construction_node,
+            map_matching_node,
+            PID_node,
+            visualization_node
+            ]
+        )
 
     # 3. Pack them into the LaunchDescription and return it
     return LaunchDescription([
-        turtlesim_node,
-        teleop_node
+        gazebo_launch,
+        other_nodes
     ])
