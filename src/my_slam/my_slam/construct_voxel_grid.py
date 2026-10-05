@@ -25,6 +25,8 @@ class createVoxelGrid(Node):
         self.infoDict = {} # hash (x, y) --> total # of elements, mean vector, product matrix 
         self.lidarOffset = np.array([-0.032, 0.0])
 
+        self.buildCounter = 0
+
         self.lidar_subscriber = self.create_subscription (
             LaserScan,
             '/scan',
@@ -35,7 +37,7 @@ class createVoxelGrid(Node):
         self.EKF_subscriber = self.create_subscription (
             Float64MultiArray,
             '/corrected',
-            self.updateStateVector,
+            self.updateMap,
             1
         )
 
@@ -45,11 +47,17 @@ class createVoxelGrid(Node):
             1
         )
 
-    def updateStateVector(self, message):
-        self.stateVector = np.array(message.data)
+    def updateMap(self, message):
+        if self.buildCounter != 0:
+            self.stateVector = np.array(message.data)
+            self.constructGrid(self.lidarMessage)
+        else:
+            self.buildCounter += 1
+
 
     def updateLidarScan(self, message):
-        if self.lidarMessage != None:
+        if self.lidarMessage == None:
+            self.lidarMessage = message
             self.constructGrid(self.lidarMessage)
         
         self.lidarMessage = message
@@ -72,8 +80,8 @@ class createVoxelGrid(Node):
             mapX = baseX * np.cos(theta) - baseY * np.sin(theta) + self.stateVector[0]
             mapY = baseX * np.sin(theta) + baseY * np.cos(theta) + self.stateVector[1]
 
-            voxelX = mapX // .20 # X input for dictionary
-            voxelY = mapY // .20 # Y input for dictionary
+            voxelX = int(np.floor(mapX // .20)) # X input for dictionary
+            voxelY = int(np.floor(mapY // .20)) # Y input for dictionary
 
             # [0] --> number of entries, [1] --> mean vector [meanX, meanY], [2] --> previous product matrix
             previousValues = self.infoDict.get((voxelX, voxelY), [0, np.array([0, 0]), np.array([[0 , 0], [0, 0]])])

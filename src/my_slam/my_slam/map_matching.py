@@ -84,6 +84,9 @@ class scanMatching(Node):
 
         return Q
 
+    def wrapAngle(angle):
+        return (angle + np.pi) % (2 * np.pi) - np.pi
+
     def createPosEstimate(self, message):
         if self.voxelDict != {} and self.stateVector is not None:
             deltaPos = np.array([0, 0, 0])
@@ -220,6 +223,7 @@ class scanMatching(Node):
                     break
                 
                 updatedVector = self.stateVector + np.append(deltaPos, [0, 0, 0, 0])
+                updatedVector[2] = self.wrapAngle(updatedVector[2])
                 
                 print("PREVIOUS X: ", self.stateVector[0])
                 print("NEW X: ", updatedVector[0])
@@ -254,7 +258,7 @@ def main(args = None):
 
     rclpy.spin(newNode)
 
-    newNode.destroy()
+    newNode.destroy_node()
 
     rclpy.shutdown()
 

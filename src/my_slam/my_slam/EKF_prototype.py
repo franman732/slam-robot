@@ -36,8 +36,8 @@ class EKF(Node):
                     ])
         
         self.sensorNoiseMatrix = np.diag([
-            0.018**2,           # x process uncertainty
-            0.018**2,           # y process uncertainty
+            0.010**2,           # x process uncertainty
+            0.010**2,           # y process uncertainty
             np.deg2rad(0.38)**2, # theta process uncertainty
             0.05**2,            # velocity uncertainty
             0.05**2,            # angular velocity uncertainty
@@ -49,7 +49,7 @@ class EKF(Node):
         self.odomVel = 0
         self.odomAngVel = 0
 
-        self.startTime = time.perf_counter() # Represents the time from the start of the program, in ms, to the time that we last updated our self.stateVector. This is used to determine delta T
+        self.startTime = self.get_clock().now() # Represents the time from the start of the program, in ms, to the time that we last updated our self.stateVector. This is used to determine delta T
 
         self.IMU_subscriber = self.create_subscription(
             Imu,
@@ -89,7 +89,7 @@ class EKF(Node):
         linearAccelX = msg.linear_acceleration.x
         angularVelocity = msg.angular_velocity.z
 
-        self.updateStateVector(time.perf_counter() - self.startTime, angularVelocity, linearAccelX)
+        self.updateStateVector(self.get_clock().now() - self.startTime, angularVelocity, linearAccelX)
 
     def updateOdom(self, msg):        
         odomVelX = msg.twist.twist.linear.x
@@ -98,6 +98,9 @@ class EKF(Node):
         self.odomAngVel = msg.twist.twist.angular.z
         self.newOdom = 1
         self.odomVel = np.sqrt(odomVelX ** 2 + odomVelY ** 2)
+
+    def wrapAngle(angle):
+        return (angle + np.pi) % (2 * np.pi) - np.pi
 
     def calculateF(self, deltaT, linAcc):
         theta = self.stateVector[2]
@@ -150,6 +153,8 @@ class EKF(Node):
         ])
 
         return W
+    
+    
 
     def calculateQ(self, deltaT, theta):
         W = self.constructW()
@@ -193,7 +198,7 @@ class EKF(Node):
 
         self.stateVector[0] = xPos + linearVel * np.cos(theta) * deltaT + (1/2) * (linearAccel - linearBias) * np.cos(theta) * (deltaT ** 2)
         self.stateVector[1] = yPos + linearVel * np.sin(theta) * deltaT + (1/2) * (linearAccel - linearBias) * np.sin(theta) * (deltaT ** 2)
-        self.stateVector[2] = theta + angularVel * deltaT
+        self.stateVector[2] = self.wrapAngle(theta + angularVel * deltaT)
         self.stateVector[3] = linearVel + (linearAccel - linearBias) * deltaT
         self.stateVector[4] = angularVel
         # self.stateVector values 5 and 6 are not updated in this prediction phase. They are updated during the propagation of error in correction phase.
@@ -210,7 +215,7 @@ class EKF(Node):
         print("Preidcted Rotation: ", self.stateVector[2])
 
         self.prediction_publisher.publish(msg)
-        self.startTime = time.perf_counter()
+        self.startTime = self.get_clock().now()
         self.newOdom = 0
 
     def correctStateVector(self, message):
@@ -232,6 +237,7 @@ class EKF(Node):
         #print("IDAR UNCERTAINTY: ", lidarUncertainty)
 
         residualVector = lidarVector[:3] - self.stateVector[:3]
+        residualVector[2] = self.wrapAngle(residualVector[2])
 
         innovationCovariance = self.HMatrix @ self.covarianceMatrix @ self.HMatrix.T + lidarUncertainty
         
@@ -241,6 +247,8 @@ class EKF(Node):
         #print("RESIDUAL VECTOR: ", residualVector)
 
         self.stateVector = self.stateVector.T + kalmanGain @ residualVector.T
+        self.stateVector[2] = self.wrapAngle(self.stateVector[2])
+
         self.covarianceMatrix = (np.identity(7) - kalmanGain @ self.HMatrix) @ self.covarianceMatrix @ (np.identity(7) - kalmanGain @ self.HMatrix).T + kalmanGain @ lidarUncertainty @ kalmanGain.T
 
         msg = Float64MultiArray()
