@@ -6,6 +6,7 @@ from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float64MultiArray
 from slam_messages.msg import VoxelGrid
 from slam_messages.msg import Voxel
+from std_msgs.msg import Float64
 
 class createVoxelGrid(Node):
     def __init__(self):
@@ -27,6 +28,11 @@ class createVoxelGrid(Node):
 
         self.buildCounter = 0
 
+        self.prevSkipped = 0
+        self.skippedNum = 0
+
+        self.NDT_Error = 0
+
         self.lidar_subscriber = self.create_subscription (
             LaserScan,
             '/scan',
@@ -41,16 +47,43 @@ class createVoxelGrid(Node):
             1
         )
 
+        self.NDT_error_subscriber = self.create_subscription (
+            Float64,
+            '/NDT_error',
+            self.updateError,
+            1
+        )
+
         self.voxelPublisher = self.create_publisher (
             VoxelGrid,
             'NDTVoxelMap',
             1
         )
 
+    def updateError(self, message):
+        self.NDT_Error = message.data
+
     def updateMap(self, message):
         if self.buildCounter != 0:
-            self.stateVector = np.array(message.data)
-            self.constructGrid(self.lidarMessage)
+            newStateVector = np.array(message.data)
+            self.skippedNum += 1
+
+            stateError = sum(newStateVector - self.stateVector)
+            if (np.linalg.norm(stateError) < .2) and (self.NDT_Error > 0.2):
+                print("NDT ERROR: ", self.NDT_Error)
+                self.stateVector = newStateVector
+                self.constructGrid(self.lidarMessage)
+                self.prevSkipped = self.skippedNum
+            else:
+                if self.NDT_Error > 0.2:
+                    print("NDT ERROR TOO BIG -------------------------------------------------")
+
+                if (self.skippedNum - self.prevSkipped > 4):
+                    self.stateVector = newStateVector
+                    self.constructGrid(self.lidarMessage)
+                    self.prevSkipped = self.skippedNum
+
+                print("WE SKIPPED NUMBER: ", self.skippedNum)
         else:
             self.buildCounter += 1
 
@@ -80,8 +113,8 @@ class createVoxelGrid(Node):
             mapX = baseX * np.cos(theta) - baseY * np.sin(theta) + self.stateVector[0]
             mapY = baseX * np.sin(theta) + baseY * np.cos(theta) + self.stateVector[1]
 
-            voxelX = int(np.floor(mapX // .20)) # X input for dictionary
-            voxelY = int(np.floor(mapY // .20)) # Y input for dictionary
+            voxelX = mapX // .20 # X input for dictionary
+            voxelY = mapY // .20 # Y input for dictionary
 
             # [0] --> number of entries, [1] --> mean vector [meanX, meanY], [2] --> previous product matrix
             previousValues = self.infoDict.get((voxelX, voxelY), [0, np.array([0, 0]), np.array([[0 , 0], [0, 0]])])

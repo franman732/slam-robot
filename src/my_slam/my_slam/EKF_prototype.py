@@ -49,7 +49,7 @@ class EKF(Node):
         self.odomVel = 0
         self.odomAngVel = 0
 
-        self.startTime = self.get_clock().now() # Represents the time from the start of the program, in ms, to the time that we last updated our self.stateVector. This is used to determine delta T
+        self.startTime = time.perf_counter() # Represents the time from the start of the program, in ms, to the time that we last updated our self.stateVector. This is used to determine delta T
 
         self.IMU_subscriber = self.create_subscription(
             Imu,
@@ -89,7 +89,7 @@ class EKF(Node):
         linearAccelX = msg.linear_acceleration.x
         angularVelocity = msg.angular_velocity.z
 
-        self.updateStateVector(self.get_clock().now() - self.startTime, angularVelocity, linearAccelX)
+        self.updateStateVector(time.perf_counter() - self.startTime, angularVelocity, linearAccelX)
 
     def updateOdom(self, msg):        
         odomVelX = msg.twist.twist.linear.x
@@ -99,7 +99,7 @@ class EKF(Node):
         self.newOdom = 1
         self.odomVel = np.sqrt(odomVelX ** 2 + odomVelY ** 2)
 
-    def wrapAngle(angle):
+    def wrapAngle(self, angle):
         return (angle + np.pi) % (2 * np.pi) - np.pi
 
     def calculateF(self, deltaT, linAcc):
@@ -215,7 +215,7 @@ class EKF(Node):
         print("Preidcted Rotation: ", self.stateVector[2])
 
         self.prediction_publisher.publish(msg)
-        self.startTime = self.get_clock().now()
+        self.startTime = time.perf_counter()
         self.newOdom = 0
 
     def correctStateVector(self, message):

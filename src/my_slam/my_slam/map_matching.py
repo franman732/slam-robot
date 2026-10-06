@@ -6,7 +6,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float64MultiArray
 from slam_messages.msg import VoxelGrid
-from slam_messages.msg import Voxel
+from std_msgs.msg import Float64
 
 class scanMatching(Node):
     def __init__(self):
@@ -57,6 +57,12 @@ class scanMatching(Node):
             1
         )
 
+        self.error_publisher = self.create_publisher (
+            Float64,
+            '/NDT_error',
+            1
+        )
+
     def updateState(self, message):
         self.stateVector = np.array(message.data)
 
@@ -84,7 +90,7 @@ class scanMatching(Node):
 
         return Q
 
-    def wrapAngle(angle):
+    def wrapAngle(self, angle):
         return (angle + np.pi) % (2 * np.pi) - np.pi
 
     def createPosEstimate(self, message):
@@ -241,6 +247,11 @@ class scanMatching(Node):
                     keepUpdating = False
 
             print("WE HAVE EXITED LOOP")
+
+            errorMsg = Float64()
+            errorMsg.data = totalError / totalNodes
+
+            self.error_publisher.publish(errorMsg)
 
             storageList.extend(self.stateVector.flatten().tolist())
             storageList.extend(np.linalg.pinv(Hessian).flatten().tolist())
