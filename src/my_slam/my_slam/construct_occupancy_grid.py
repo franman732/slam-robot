@@ -76,13 +76,11 @@ class occupancyGrid(Node):
         tRobot = self.stateVector[2]
 
         for i, range in enumerate(self.internalScan.ranges):
-            if range <= 0 or range > self.maxRange: # max range set to 10 meters
-                print("NOT IN RANGE")
-                continue 
+            maxDistance = False
 
             if not np.isfinite(range):
-                print("NOT FINITE")
-                continue
+                range = 3.5
+                maxDistance = True
 
             xCurrent = xRobot
             yCurrent = yRobot
@@ -117,17 +115,29 @@ class occupancyGrid(Node):
                 distance = np.sqrt((xCurrent - xRobot) ** 2 + (yCurrent - yRobot) ** 2)
 
                 if distance > self.maxRange:
+                    print("TOO FARR -------------")
+                    print("DISTANCE: ", distance)
+                    print("XCURRENT: ", xCurrent)
+                    print("YCURRENT: ", yCurrent)
                     break
 
                 distScore = 1 - distance / self.maxRange
 
-                if currentOccupancyX == finalOccupancyX and currentOccupancyY == finalOccupancyY:
-                    newLogOdds = max(-4.6, min(4.6, logOdds + (1.5 * distScore)))
-                    self.occupancyDict[(currentOccupancyX, currentOccupancyY)] = newLogOdds
-                    #print("WE BROKE OUT!")
-                    break
+                if not maxDistance:
+                    if currentOccupancyX == finalOccupancyX and currentOccupancyY == finalOccupancyY:
+                        newLogOdds = max(-4.6, min(4.6, logOdds + (1.5 * distScore)))
+                        self.occupancyDict[(currentOccupancyX, currentOccupancyY)] = newLogOdds
+                        #print("WE BROKE OUT!")
+                        break
+                    else:
+                        newLogOdds = max(-4.6, min(4.6, logOdds - distScore))
                 else:
-                    newLogOdds = max(-4.6, min(4.6, logOdds - distScore))
+                    if currentOccupancyX == finalOccupancyX and currentOccupancyY == finalOccupancyY:
+                        newLogOdds = 0
+                        self.occupancyDict[(currentOccupancyX, currentOccupancyY)] = newLogOdds
+                        break
+                    else:
+                        newLogOdds = max(-4.6, min(4.6, logOdds - distScore))
 
                 """print("CURRENT OCCUPANCY X: ", currentOccupancyX)
                 print("CURRENT OCCUPANCY Y: ", currentOccupancyY)
