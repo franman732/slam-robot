@@ -5,6 +5,8 @@ from rclpy.node import Node
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 from geometry_msgs.msg import Point
+from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import ColorRGBA
 
 from slam_messages.msg import VoxelGrid
 
@@ -12,16 +14,29 @@ class VoxelGridVisualizer(Node):
     def __init__(self):
         super().__init__('voxel_grid_visualizer')
 
-        self.subscription = self.create_subscription(
+        self.voxelSubscription = self.create_subscription (
             VoxelGrid,
             '/NDTVoxelMap',
             self.constructVizMap,
             10
         )
 
-        self.publisher = self.create_publisher(
+        self.occupancySubscription = self.create_subscription (
+            Float64MultiArray,
+            '/occupancyGrid',
+            self.constructOccupancyGrid,
+            1
+        )
+
+        self.voxelPublisher = self.create_publisher (
             MarkerArray,
             '/voxel_grid_visualization',
+            10
+        )
+
+        self.occupancyPublisher = self.create_publisher(
+            Marker,
+            '/occupancyGridVisualization',
             10
         )
 
@@ -163,8 +178,58 @@ class VoxelGridVisualizer(Node):
 
             counter += 1
 
-        self.publisher.publish(markerArray)
+        self.voxelPublisher.publish(markerArray)
 
+
+    def constructOccupancyGrid(self, message):
+        gridList = np.array(message.data)
+
+        square = Marker()
+        square.header.frame_id = 'map'
+        square.id = 0
+        
+        square.type = Marker.CUBE_LIST
+        square.action = Marker.ADD
+
+        square.scale.x = .03
+        square.scale.y = .03
+        square.scale.z = 0.1
+
+        x = 0
+        y = 0
+
+        for i, value in enumerate(gridList):
+            
+            identifier = (i + 1) % 3
+
+            if identifier == 1:
+                x = value
+            elif identifier == 2:
+                y = value
+            else:
+                p = Point()
+                p.x = x * .03 + .015
+                p.y = y * .03 + .015
+                p.z = 0.01
+
+                c = ColorRGBA()
+
+                if value > 0:
+                    c.r = 1.0
+                    c.g = 0.0
+                    c.b = 0.0
+                    c.a = 1.0
+                else:
+                    c.r = 0.0
+                    c.g = 1.0
+                    c.b = 0.0
+                    c.a = 1.0
+
+                square.points.append(p)
+                square.colors.append(c)
+
+        self.occupancyPublisher.publish(square)
+        print("markerArray")
 
 def main(args = None):
     rclpy.init(args = args)

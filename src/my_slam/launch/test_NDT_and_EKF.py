@@ -52,6 +52,13 @@ def generate_launch_description():
         output='screen'
     )
 
+    occupancy_node = Node(
+        package='my_slam',
+        executable='construct_occupancy_grid',
+        name='occupancy_Node',
+        output='screen'
+    )
+
     visualization_node = Node(
         package='my_slam',
         executable='visualization',
@@ -67,7 +74,8 @@ def generate_launch_description():
             voxel_construction_node,
             map_matching_node,
             PID_node,
-            visualization_node
+            visualization_node,
+            #occupancy_node
             ]
         )
 

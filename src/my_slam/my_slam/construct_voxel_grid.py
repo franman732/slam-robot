@@ -69,7 +69,7 @@ class createVoxelGrid(Node):
             self.skippedNum += 1
 
             stateError = sum(newStateVector - self.stateVector)
-            if (np.linalg.norm(stateError) < .2) and (self.NDT_Error > 0.2):
+            if (self.NDT_Error > 0.15):
                 print("NDT ERROR: ", self.NDT_Error)
                 self.stateVector = newStateVector
                 self.constructGrid(self.lidarMessage)
@@ -78,10 +78,10 @@ class createVoxelGrid(Node):
                 if self.NDT_Error > 0.2:
                     print("NDT ERROR TOO BIG -------------------------------------------------")
 
-                if (self.skippedNum - self.prevSkipped > 4):
+                """if (self.skippedNum - self.prevSkipped > 12):
                     self.stateVector = newStateVector
                     self.constructGrid(self.lidarMessage)
-                    self.prevSkipped = self.skippedNum
+                    self.prevSkipped = self.skippedNum"""
 
                 print("WE SKIPPED NUMBER: ", self.skippedNum)
         else:

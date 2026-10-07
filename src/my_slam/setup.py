@@ -33,7 +33,8 @@ setup(
             'construct_voxel_grid = my_slam.construct_voxel_grid:main',
             'visualization = my_slam.visualization:main',
             'map_matching = my_slam.map_matching:main',
-            'get_Q_matrix_values = my_slam.get_Q_matrix_values:main'
+            'get_Q_matrix_values = my_slam.get_Q_matrix_values:main',
+            'construct_occupancy_grid = my_slam.construct_occupancy_grid:main'
         ],
     },
 )
