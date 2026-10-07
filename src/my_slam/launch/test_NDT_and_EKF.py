@@ -75,7 +75,7 @@ def generate_launch_description():
             map_matching_node,
             PID_node,
             visualization_node,
-            #occupancy_node
+            occupancy_node
             ]
         )
 

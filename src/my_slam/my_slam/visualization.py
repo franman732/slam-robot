@@ -210,7 +210,7 @@ class VoxelGridVisualizer(Node):
                 p = Point()
                 p.x = x * .03 + .015
                 p.y = y * .03 + .015
-                p.z = 0.01
+                p.z = 0.00125
 
                 c = ColorRGBA()
 
