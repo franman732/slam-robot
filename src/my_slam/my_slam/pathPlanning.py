@@ -48,9 +48,11 @@ class pathPlanning(Node):
 
 
     def updateState(self, message):
+        print("UPDATING STATE")
         self.stateVector = np.array(message.data)
 
     def updateOccupancyGrid(self, message):
+        print("UPDATING OCCUPANCY GRID")
         gridList = message.data
         x = 0
         y = 0
@@ -75,17 +77,24 @@ class pathPlanning(Node):
         print("WE DETERMINING MOVE ORDER")
 
         currentSquare = targetSquare
-        finalMovesList = [currentSquare]
+        finalMovesList = []
+
+        print("LENGTH OF DICT: ", len(self.shortestDict.items()))
+        iterationCount = 0
         
         while True:
-            if currentSquare == None:
+            print("ITERATION COUNT: ", iterationCount)
+            iterationCount += 1
+            print("SQUARE: ", currentSquare)
+            
+            finalMovesList.append((currentSquare[0], currentSquare[1]))
+            previousSquare = self.shortestDict[currentSquare] # ShortestDict takes coordinate pairs as keys, so I have to exclude score when updating currentSquare.
+
+            if previousSquare == None:
                 finalMovesList.reverse()
                 self.prepareMoveList(finalMovesList)
                 break
 
-            previousSquare = self.shortestDict[currentSquare] # ShortestDict takes coordinate pairs as keys, so I have to exclude score when updating currentSquare.
-
-            finalMovesList.append((previousSquare[0], previousSquare[1]))
             currentSquare = (previousSquare[0], previousSquare[1])
 
         print("WE DETERMINED MOVE ORDER NOW")
@@ -118,19 +127,18 @@ class pathPlanning(Node):
         print("WE CREATING PATH")
         self.shortestDict.clear()
         robotSquare = [0, 0, self.stateVector[0] // .03, self.stateVector[1] // .03, None] # squares in the queue are saved as [score, distanceTraveled, x, y, parentNode]
-        targetSquare = message # This is in the form of a list
+        endPoint = message
+        targetSquare = (endPoint.x, endPoint.y) # This is in the form of a list
         
         robotSquare[0] = self.calculateDistance(robotSquare, targetSquare) # Initializes the score of robotSquare.
+        self.shortestDict[(robotSquare[2], robotSquare[3])] = None
 
-        seenSet = set()
         squareHeap = []
         heapq.heapify(squareHeap)
         heapq.heappush(squareHeap, robotSquare)
 
         while squareHeap:
-            startSquare = squareHeap.heappop()
-            
-            seenSet.add((startSquare[2], startSquare[3]))
+            startSquare = heapq.heappop(squareHeap)
 
             for d in self.directions:
                 # [dx, dy, dTraveled] = d
@@ -138,27 +146,28 @@ class pathPlanning(Node):
                 newX = startSquare[2] + d[0]
                 newY = startSquare[3] + d[1]
 
-                if (newX, newY) in seenSet:
+                if self.inflatedOccupancyDict.get((newX, newY), 0) > 0:
                     continue
 
-                seenSet.add((newX, newY))
-
                 newT = startSquare[1] + d[2]
-                distance = self.calculateDistance((newX, newY), targetSquare)
+                distance = self.calculateDistance((0, 0, newX, newY), targetSquare)
 
                 newScore = newT + distance * 1.2
 
                 heapq.heappush(squareHeap, [newScore, newT, newX, newY, (startSquare[2], startSquare[3])])
-                if self.shortestDict.get((newX, newY), (0, 0, np.inf))[2] > newScore:
-                    self.shortestDict[(newX, newY)] = (startSquare[2], startSquare[3], newScore)
+                if (newX, newY) != (robotSquare[2], robotSquare[3]):
+                    if self.shortestDict.get((newX, newY), (0, 0, np.inf))[2] > newScore:
+                        self.shortestDict[(newX, newY)] = (startSquare[2], startSquare[3], newScore)
 
-                if (newX, newY) == (targetSquare[0], targetSquare[1]):
-                    self.determineMoveOrder(targetSquare)
-                    return
+                    if (newX, newY) == (targetSquare[0], targetSquare[1]):
+                        self.determineMoveOrder(targetSquare)
+                        return
 
         print("WE EXITED LOOP")
 
 def main(args = None):
+    print("WE PATH PLANNING")
+
     rclpy.init(args=args)
 
     pathNode = pathPlanning()
@@ -170,5 +179,4 @@ def main(args = None):
     rclpy.shutdown()
 
 if __name__ == '__main__':
-    print("WE PATH PLANNING")
     main()

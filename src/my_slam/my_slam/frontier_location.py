@@ -28,7 +28,7 @@ class findFrontiers(Node):
 
         self.occupancySubscriber = self.create_subscription (
             Float64MultiArray,
-            '/OccupancyGrid',
+            '/occupancyGrid',
             self.locateFrontiers,
             1
         )
@@ -108,7 +108,7 @@ class findFrontiers(Node):
             frontierList = []
 
             while frontierQueue:
-                print("WE IN QUEUE")
+                #print("WE IN QUEUE")
                 startSquare = frontierQueue.popleft()
 
                 if startSquare in seenFrontierSet:
@@ -131,11 +131,9 @@ class findFrontiers(Node):
                 frontierList.append(startSquare)
                 seenFrontierSet.add(startSquare)
 
-                print("SQUARE COUNTER: ", squareCounter)
-                print("MEANX: ", meanX)
-                print("MEAN Y: ", meanY)
+                #print("SQUARE COUNTER: ", squareCounter)
 
-            print("WE OUT OF QUEUE")
+            #print("WE OUT OF QUEUE")
 
             if squareCounter > bestFrontier[2]:
                 bestFrontier[0] = meanX
@@ -151,10 +149,13 @@ class findFrontiers(Node):
                         frontierSquare = square
                         bestDist = dist
 
+        print("MEANX: ", meanX)
+        print("MEAN Y: ", meanY)
+
         self.findBestSquareInflated(frontierSquare)
 
     def locateFrontiers(self, message):
-        print("WERE LOCATING")
+        #print("WERE LOCATING")
         seenLocateSet = set()
         frontierSet = set()
         locateQueue = deque()
@@ -202,7 +203,7 @@ class findFrontiers(Node):
 
         self.findBestFrontier(frontierSet)
 
-        print("WE LOCATED FRONTIERS")
+        #print("WE LOCATED FRONTIERS")
 
 def main(args = None):
     rclpy.init(args = args)

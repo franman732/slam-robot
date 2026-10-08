@@ -169,7 +169,7 @@ class scanMatching(Node):
                 #print("------------------------------------------------------------")
 
                 if totalNodes < 50:
-                    print("NDT REJECTED: too few points")
+                    print("too few points")
                     break
 
                 gradientNorm = gradient / totalNodes
@@ -184,25 +184,25 @@ class scanMatching(Node):
                 #print("CONDITION:", condition)
 
                 if not np.all(np.isfinite(Hessian_reg)):
-                    print("NDT REJECTED: invalid Hessian")
+                    print("invalid Hessian")
                     break
 
                 if not np.all(np.isfinite(gradientNorm)):
-                    print("NDT REJECTED: invalid gradient")
+                    print("invalid gradient")
                     break
 
                 if np.min(eigenvalues) <= 0:
-                    print("NDT REJECTED: Hessian not positive definite")
+                    print("Hessian not positive definite")
                     break
 
                 if condition > 100:
-                    print("NDT REJECTED: Hessian poorly conditioned")
+                    print("Hessian poorly conditioned")
                     break
 
                 try:
                     deltaPos = -np.linalg.solve(Hessian_reg, gradientNorm)
                 except:
-                    print("Hessian is still singular! Skipping optimization loop.")
+                    print("Hessian is still singular skipping optimization loop.")
                     break # or continue/handle gracefully
 
                 """print("RAW DELTA:", deltaPos)
@@ -217,15 +217,15 @@ class scanMatching(Node):
                 rotation_norm = abs(deltaPos[2])
 
                 if not np.all(np.isfinite(deltaPos)):
-                    print("NDT REJECTED: invalid delta")
+                    print("invalid delta")
                     break
 
                 if translation_norm > self.maxTranslation:
-                    print("NDT REJECTED: translation step too large")
+                    print("translation step too large")
                     break
 
                 if rotation_norm > self.maxRotation:
-                    print("NDT REJECTED: rotation step too large")
+                    print("rotation step too large")
                     break
                 
                 updatedVector = self.stateVector + np.append(deltaPos, [0, 0, 0, 0])

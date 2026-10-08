@@ -13,7 +13,7 @@ setup(
         ('share/my_slam/launch',
             ['launch/test_NDT_and_EKF.py',
             'launch/test_path_finding.py',
-            'launch/test_A*.py']),
+            'launch/test_frontier.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
