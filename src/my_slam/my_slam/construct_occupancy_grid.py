@@ -15,11 +15,13 @@ class occupancyGrid(Node):
 
         self.stateVector = np.zeros(7)
         self.occupancyDict = {}
+        self.inflatedDict = {}
         self.maxRange = 3.5
         self.NDT_Error = 0
 
         self.prevSkipped = 0
         self.skippedNum = 0
+        self.INFLATIONSQUARES = 4
 
         self.scanSubscriber = self.create_subscription (
             LaserScan,
@@ -35,18 +37,25 @@ class occupancyGrid(Node):
             1
         )
 
-        self.occupancyPublisher = self.create_publisher (
-            Float64MultiArray,
-            '/occupancyGrid',
-            1
-        )
-
         self.NDT_error_subscriber = self.create_subscription (
             Float64,
             '/NDT_error',
             self.updateError,
             1
         )
+
+        self.occupancyPublisher = self.create_publisher (
+            Float64MultiArray,
+            '/occupancyGrid',
+            1
+        )
+
+        self.inflatedOccupancyPublisher = self.create_publisher (
+            Float64MultiArray,
+            '/inflatedOccupancyGrid',
+            1
+        )
+        
 
     def updateScan(self, message):
         self.internalScan = message
@@ -60,7 +69,7 @@ class occupancyGrid(Node):
 
         stateError = sum(newStateVector - self.stateVector)
         if (self.NDT_Error > 0.3):
-            print("NDT ERROR: ", self.NDT_Error)
+            #print("NDT ERROR: ", self.NDT_Error)
             self.stateVector = newStateVector
             self.updateMap()
             self.prevSkipped = self.skippedNum
@@ -75,11 +84,11 @@ class occupancyGrid(Node):
         yRobot = self.stateVector[1]
         tRobot = self.stateVector[2]
 
-        for i, range in enumerate(self.internalScan.ranges):
+        for i, lidarRange in enumerate(self.internalScan.ranges):
             maxDistance = False
 
-            if not np.isfinite(range):
-                range = 3.5
+            if not np.isfinite(lidarRange):
+                lidarRange = 3.5
                 maxDistance = True
 
             xCurrent = xRobot
@@ -91,8 +100,8 @@ class occupancyGrid(Node):
             xStep = np.cos(globalAngle)
             yStep = np.sin(globalAngle)
 
-            globalX = xRobot + range * np.cos(globalAngle)
-            globalY = yRobot + range * np.sin(globalAngle)
+            globalX = xRobot + lidarRange * np.cos(globalAngle)
+            globalY = yRobot + lidarRange * np.sin(globalAngle)
 
             finalOccupancyX = int(globalX // .03) # This is the x of the ending grid square
             finalOccupancyY = int(globalY // .03) # This is the y of the ending grid square
@@ -115,10 +124,10 @@ class occupancyGrid(Node):
                 distance = np.sqrt((xCurrent - xRobot) ** 2 + (yCurrent - yRobot) ** 2)
 
                 if distance > self.maxRange:
-                    print("TOO FARR -------------")
-                    print("DISTANCE: ", distance)
-                    print("XCURRENT: ", xCurrent)
-                    print("YCURRENT: ", yCurrent)
+                    #print("TOO FARR -------------")
+                    #print("DISTANCE: ", distance)
+                    #print("XCURRENT: ", xCurrent)
+                    #print("YCURRENT: ", yCurrent)
                     break
 
                 distScore = 1 - distance / self.maxRange
@@ -202,7 +211,40 @@ class occupancyGrid(Node):
                         currentOccupancyY -= 1
                         nextOccupancyY = currentOccupancyY * 0.03
 
-            print("WE BROKE OUT!!")
+            #print("WE BROKE OUT!!")
+
+
+        
+        for square, logOdds in self.occupancyDict.items():
+            if logOdds > 0:
+                squareX, squareY = square
+
+                for dx in range(-self.INFLATIONSQUARES, self.INFLATIONSQUARES + 1):
+                    for dy in range(-self.INFLATIONSQUARES, self.INFLATIONSQUARES + 1):
+
+                        inflatedX = squareX + dx
+                        inflatedY = squareY + dy
+
+                        self.inflatedDict[(inflatedX, inflatedY)] = 4.6
+            else:
+                if self.inflatedDict.get(square, None) == None:
+                    self.inflatedDict[square] = logOdds
+
+        inflatedFlattenedGrid = []
+        inflatedOccupancyMsg = Float64MultiArray()
+
+        dictList = list(self.inflatedDict.items())
+
+        for square in dictList:
+            inflatedFlattenedGrid.append(square[0][0])
+            inflatedFlattenedGrid.append(square[0][1])
+            inflatedFlattenedGrid.append(square[1])
+
+        inflatedOccupancyMsg.data = inflatedFlattenedGrid
+
+        self.inflatedOccupancyPublisher.publish(inflatedOccupancyMsg)
+
+        # This above section is for constructing and publishing the inflated occupancy grid used for path planning.
         
         flattenedGrid = []
         occupancyMsg = Float64MultiArray()
@@ -215,7 +257,7 @@ class occupancyGrid(Node):
 
         occupancyMsg.data = flattenedGrid
 
-        print("publishing!!")
+        #print("publishing!!")
         self.occupancyPublisher.publish(occupancyMsg)
 
 def main(args = None):

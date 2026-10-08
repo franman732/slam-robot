@@ -14,6 +14,10 @@ class VoxelGridVisualizer(Node):
     def __init__(self):
         super().__init__('voxel_grid_visualizer')
 
+        self.INFLATEDXOFFSET = 3.0
+        self.OCCUPANCYXOFFSET = -3.0
+        self.VOXELYOFFSET = -6.0
+
         self.voxelSubscription = self.create_subscription (
             VoxelGrid,
             '/NDTVoxelMap',
@@ -24,9 +28,31 @@ class VoxelGridVisualizer(Node):
         self.occupancySubscription = self.create_subscription (
             Float64MultiArray,
             '/occupancyGrid',
-            self.constructOccupancyGrid,
+            self.occupancyGrid,
             1
         )
+
+        self.inflatedOccupancySubscription = self.create_subscription (
+            Float64MultiArray,
+            '/inflatedOccupancyGrid',
+            self.inflatedOccupancyGrid,
+            1
+        )
+
+        self.stateSubscriber = self.create_subscription (
+            Float64MultiArray,
+            '/corrected',
+            self.addCar,
+            1
+        )
+
+        self.frontierSubscriber = self.create_subscription (
+            Point,
+            '/frontier',
+            self.addFrontier,
+            1
+        )
+
 
         self.voxelPublisher = self.create_publisher (
             MarkerArray,
@@ -40,7 +66,32 @@ class VoxelGridVisualizer(Node):
             10
         )
 
-        self.voxelSize = 0.2
+        self.inflatedOccupancyPublisher = self.create_publisher(
+            Marker,
+            '/inflatedGridVisualization',
+            10
+        )
+
+        self.carPublisher = self.create_publisher(
+            Marker,
+            '/carVisualization',
+            1
+        )
+
+        self.frontierPublisher = self.create_publisher (
+            Marker,
+            '/frontierVisualization',
+            1
+        )
+
+        self.VOXELSIZE = 0.2
+        self.OCCUPANCYSIZE = 0.03
+
+    def occupancyGrid(self, message):
+        self.constructOccupancyGrid(message, 0)
+
+    def inflatedOccupancyGrid(self, message):
+        self.constructOccupancyGrid(message, 1)
 
     def constructVizMap(self, message):
         markerArray = MarkerArray()
@@ -51,10 +102,10 @@ class VoxelGridVisualizer(Node):
         t = np.linspace(0, 2 * np.pi, num_points)
 
         for i, voxel in enumerate(message.voxels):
-            xMin = voxel.voxel_x * self.voxelSize
-            xMax = (voxel.voxel_x + 1) * self.voxelSize
-            yMin = voxel.voxel_y * self.voxelSize
-            yMax = (voxel.voxel_y + 1) * self.voxelSize
+            xMin = voxel.voxel_x * self.VOXELSIZE
+            xMax = (voxel.voxel_x + 1) * self.VOXELSIZE
+            yMin = voxel.voxel_y * self.VOXELSIZE
+            yMax = (voxel.voxel_y + 1) * self.VOXELSIZE
 
             corners = [
                 (xMin, yMin),
@@ -76,12 +127,12 @@ class VoxelGridVisualizer(Node):
                 Line.scale.z = 0.01
 
                 p1 = Point()
-                p1.x = corners[j][0]
+                p1.x = corners[j][0] + self.VOXELYOFFSET
                 p1.y = corners[j][1]
                 p1.z = 0.0
 
                 p2 = Point()
-                p2.x = corners[(j + 1) % 4][0]
+                p2.x = corners[(j + 1) % 4][0] + self.VOXELYOFFSET
                 p2.y = corners[(j + 1) % 4][1]
                 p2.z = 0.0
 
@@ -106,7 +157,7 @@ class VoxelGridVisualizer(Node):
             mean.type = Marker.CYLINDER
             mean.action = Marker.ADD
 
-            mean.pose.position.x = voxel.x_mean
+            mean.pose.position.x = voxel.x_mean + self.VOXELYOFFSET
             mean.pose.position.y = voxel.y_mean
             mean.pose.position.z = 0.0
 
@@ -166,7 +217,7 @@ class VoxelGridVisualizer(Node):
 
                 point = Point()
 
-                point.x = float(x_final[i])
+                point.x = float(x_final[i]) + self.VOXELYOFFSET
                 point.y = float(y_final[i])
                 point.z = 0.01
 
@@ -180,20 +231,19 @@ class VoxelGridVisualizer(Node):
 
         self.voxelPublisher.publish(markerArray)
 
-
-    def constructOccupancyGrid(self, message):
+    def constructOccupancyGrid(self, message, type):
         gridList = np.array(message.data)
 
-        square = Marker()
-        square.header.frame_id = 'map'
-        square.id = 0
+        occupancy = Marker()
+        occupancy.header.frame_id = 'map'
+        occupancy.id = 0
         
-        square.type = Marker.CUBE_LIST
-        square.action = Marker.ADD
+        occupancy.type = Marker.CUBE_LIST
+        occupancy.action = Marker.ADD
 
-        square.scale.x = .03
-        square.scale.y = .03
-        square.scale.z = 0.1
+        occupancy.scale.x = self.OCCUPANCYSIZE
+        occupancy.scale.y = self.OCCUPANCYSIZE
+        occupancy.scale.z = 0.1
 
         x = 0
         y = 0
@@ -208,13 +258,15 @@ class VoxelGridVisualizer(Node):
                 y = value
             else:
                 p = Point()
-                p.x = x * .03 + .015
-                p.y = y * .03 + .015
+                p.x = x * self.OCCUPANCYSIZE - self.OCCUPANCYSIZE / 2
+                p.y = y * self.OCCUPANCYSIZE - self.OCCUPANCYSIZE / 2 + (self.INFLATEDXOFFSET if type != 0 else self.OCCUPANCYXOFFSET)
                 p.z = 0.00125
 
                 c = ColorRGBA()
 
-                if value > 0:
+                prob = np.exp(value) / (1 + np.exp(value))
+
+                if prob > .50:
                     c.r = 1.0
                     c.g = 0.0
                     c.b = 0.0
@@ -225,11 +277,71 @@ class VoxelGridVisualizer(Node):
                     c.b = 0.0
                     c.a = 1.0
 
-                square.points.append(p)
-                square.colors.append(c)
+                occupancy.points.append(p)
+                occupancy.colors.append(c)
 
-        self.occupancyPublisher.publish(square)
-        print("markerArray")
+        if type == 0:
+            self.occupancyPublisher.publish(occupancy)
+        else:
+            self.inflatedOccupancyPublisher.publish(occupancy)
+        #print("markerArray")
+
+    def addCar(self, message):
+        stateVector = np.array(message.data)
+
+        car = Marker()
+        car.header.frame_id = 'map'
+
+        car.id = 0
+        car.type = Marker.CYLINDER
+        car.action = Marker.ADD
+
+        car.pose.position.x = stateVector[0]
+        car.pose.position.y = stateVector[1]
+        car.pose.position.z = 0.126
+
+        car.scale.x = .178
+        car.scale.y = .138
+        car.scale.z = 0.01
+
+        car.color.r = 0.0
+        car.color.g = 0.0
+        car.color.b = 1.0
+        car.color.a = 1.0
+
+        car.lifetime.sec = 0
+        
+        self.carPublisher.publish(car)
+
+
+    def addFrontier(self, message):
+        xPos = message.x
+        yPos = message.y
+
+        frontier = Marker()
+        frontier.header.frame_id = 'map'
+
+        frontier.id = 0
+        frontier.type = Marker.CUBE
+        frontier.action = Marker.ADD
+
+        frontier.pose.position.x = xPos * self.OCCUPANCYSIZE - self.OCCUPANCYSIZE / 2
+        frontier.pose.position.y = yPos * self.OCCUPANCYSIZE - self.OCCUPANCYSIZE / 2 + self.INFLATEDXOFFSET
+        frontier.pose.position.z = 0.0
+
+        frontier.scale.x = self.OCCUPANCYSIZE
+        frontier.scale.y = self.OCCUPANCYSIZE
+        frontier.scale.z = .3
+
+        frontier.color.r = 1.0
+        frontier.color.g = 0.65
+        frontier.color.b = 0.0
+        frontier.color.a = 1.0
+
+        frontier.lifetime.sec = 0
+
+        self.frontierPublisher.publish(frontier)
+
 
 def main(args = None):
     rclpy.init(args = args)

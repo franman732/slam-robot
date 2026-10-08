@@ -11,7 +11,9 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/my_slam/launch',
-            ['launch/test_NDT_and_EKF.py']),
+            ['launch/test_NDT_and_EKF.py',
+            'launch/test_path_finding.py',
+            'launch/test_A*.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -34,7 +36,9 @@ setup(
             'visualization = my_slam.visualization:main',
             'map_matching = my_slam.map_matching:main',
             'get_Q_matrix_values = my_slam.get_Q_matrix_values:main',
-            'construct_occupancy_grid = my_slam.construct_occupancy_grid:main'
+            'construct_occupancy_grid = my_slam.construct_occupancy_grid:main',
+            'frontier_location = my_slam.frontier_location:main',
+            'pathPlanning = my_slam.pathPlanning:main'
         ],
     },
 )

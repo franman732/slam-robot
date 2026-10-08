@@ -163,10 +163,10 @@ class scanMatching(Node):
                     gradient += error * S
                     Hessian += error * (Q - np.outer(S, S))
 
-                print("PRE UPDATE HESSIAN: ", Hessian)
-                print("PRE UPDATE GRADIENT: ", gradient)
-                print("NUM OF NODES: ", totalNodes)
-                print("------------------------------------------------------------")
+                #print("PRE UPDATE HESSIAN: ", Hessian)
+                #print("PRE UPDATE GRADIENT: ", gradient)
+                #print("NUM OF NODES: ", totalNodes)
+                #print("------------------------------------------------------------")
 
                 if totalNodes < 50:
                     print("NDT REJECTED: too few points")
@@ -180,8 +180,8 @@ class scanMatching(Node):
                 eigenvalues = np.linalg.eigvalsh(Hessian_reg)
                 condition = np.linalg.cond(Hessian_reg)
 
-                print("EIGENVALUES:", eigenvalues)
-                print("CONDITION:", condition)
+                #print("EIGENVALUES:", eigenvalues)
+                #print("CONDITION:", condition)
 
                 if not np.all(np.isfinite(Hessian_reg)):
                     print("NDT REJECTED: invalid Hessian")
@@ -231,8 +231,8 @@ class scanMatching(Node):
                 updatedVector = self.stateVector + np.append(deltaPos, [0, 0, 0, 0])
                 updatedVector[2] = self.wrapAngle(updatedVector[2])
                 
-                print("PREVIOUS X: ", self.stateVector[0])
-                print("NEW X: ", updatedVector[0])
+                #print("PREVIOUS X: ", self.stateVector[0])
+                #print("NEW X: ", updatedVector[0])
                 """print("ERROR: ", totalError)
                 print("-----------------------------------------------------------")
                 print("HESSIAN: ", hessianNorm)
@@ -246,7 +246,7 @@ class scanMatching(Node):
                 if np.linalg.norm(deltaPos) < 0.001:
                     keepUpdating = False
 
-            print("WE HAVE EXITED LOOP")
+            #print("WE HAVE EXITED LOOP")
 
             errorMsg = Float64()
             errorMsg.data = totalError / totalNodes

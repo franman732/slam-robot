@@ -1,0 +1,9 @@
+digraph graphname {
+	graph [bb="0,0,0,0",
+		compound=True,
+		rank=same,
+		rankdir=LR,
+		ranksep=0.2
+	];
+	node [label="\N"];
+}

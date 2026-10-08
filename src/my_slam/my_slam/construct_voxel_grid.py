@@ -70,7 +70,7 @@ class createVoxelGrid(Node):
 
             stateError = sum(newStateVector - self.stateVector)
             if (self.NDT_Error > 0.15):
-                print("NDT ERROR: ", self.NDT_Error)
+                #print("NDT ERROR: ", self.NDT_Error)
                 self.stateVector = newStateVector
                 self.constructGrid(self.lidarMessage)
                 self.prevSkipped = self.skippedNum

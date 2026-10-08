@@ -210,9 +210,9 @@ class EKF(Node):
 
         msg = Float64MultiArray()
         msg.data = self.stateVector.flatten().tolist()
-        print("predicted X: ", self.stateVector[0])
-        print("Predicted Y: ", self.stateVector[1])
-        print("Preidcted Rotation: ", self.stateVector[2])
+        #print("predicted X: ", self.stateVector[0])
+        #print("Predicted Y: ", self.stateVector[1])
+        #print("Preidcted Rotation: ", self.stateVector[2])
 
         self.prediction_publisher.publish(msg)
         self.startTime = time.perf_counter()
