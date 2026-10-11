@@ -297,7 +297,7 @@ class VoxelGridVisualizer(Node):
         car.action = Marker.ADD
 
         car.pose.position.x = stateVector[0]
-        car.pose.position.y = stateVector[1]
+        car.pose.position.y = stateVector[1] + self.INFLATEDXOFFSET
         car.pose.position.z = 0.126
 
         car.scale.x = .178

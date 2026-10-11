@@ -13,8 +13,8 @@ class calculateLinearVelocities(Node):
         self.pointsList = []
 
         self.MAXACCELERATION = 0.1
-        self.MAXVELOCITY = 1
-        self.MAXVELOCITYANGULAR = 0.4
+        self.MAXVELOCITY = 0.4
+        self.MAXVELOCITYANGULAR = 0.3
         self.MAXBREAK = 0.1
 
         self.smoothed_subscriber = self.create_subscription (

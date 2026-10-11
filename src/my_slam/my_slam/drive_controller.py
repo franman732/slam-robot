@@ -14,6 +14,7 @@ class driveController(Node):
         self.pointList = []
         self.previousIndex = 0
         self.haveState = False
+        self.MAXVELOCITYANGULAR = 0.3
 
         self.state_subscriber = self.create_subscription (
             Float64MultiArray,
@@ -121,7 +122,7 @@ class driveController(Node):
             self.locateClosestPoint()
             linearVelocity = self.velocities[self.previousIndex]
             targetPoint = self.findTargetPoint()
-            angularVelocity = self.calculateAngularVel(targetPoint, linearVelocity)
+            angularVelocity = min(self.MAXVELOCITYANGULAR, self.calculateAngularVel(targetPoint, linearVelocity))
 
 
             msg = TwistStamped()
