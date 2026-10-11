@@ -2,6 +2,7 @@ import rclpy
 import numpy as np
 from collections import deque
 import heapq
+import time
 
 from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
@@ -14,10 +15,11 @@ class pathPlanning(Node):
         self.stateVector = np.zeros(7)
         self.inflatedOccupancyDict = {}
         self.shortestDict = {}
+        self.haveState = False
 
-        self.directions = [(-1, 1, .42426), (0, 1, 1), (1, 1, .42426),
+        self.directions = [(-1, 1, 1.42426), (0, 1, 1), (1, 1, 1.42426),
                             (-1, 0, 1),                 (1, 0, 1),
-                            (-1, -1, .42426), (0, -1, 1), (1, -1, .42426)]
+                            (-1, -1, 1.42426), (0, -1, 1), (1, -1, 1.42426)]
 
         self.stateSubscriber = self.create_subscription (
             Float64MultiArray,
@@ -50,6 +52,7 @@ class pathPlanning(Node):
     def updateState(self, message):
         print("UPDATING STATE")
         self.stateVector = np.array(message.data)
+        self.haveState = True
 
     def updateOccupancyGrid(self, message):
         print("UPDATING OCCUPANCY GRID")
@@ -122,48 +125,56 @@ class pathPlanning(Node):
         msg = Float64MultiArray()
         msg.data = np.array(finalList).flatten().tolist()
         self.pathPublisher.publish(msg)
+
+        
+
+        #print("MOVELIST: ", moveList)
     
     def createPath(self, message):
-        print("WE CREATING PATH")
-        self.shortestDict.clear()
-        robotSquare = [0, 0, self.stateVector[0] // .03, self.stateVector[1] // .03, None] # squares in the queue are saved as [score, distanceTraveled, x, y, parentNode]
-        endPoint = message
-        targetSquare = (endPoint.x, endPoint.y) # This is in the form of a list
+        if self.haveState:
+            print("WE CREATING PATH")
+            self.shortestDict.clear()
+            robotSquare = [0, 0, self.stateVector[0] // .03, self.stateVector[1] // .03, None] # squares in the queue are saved as [score, distanceTraveled, x, y, parentNode]
+            endPoint = message
+            targetSquare = (endPoint.x, endPoint.y) # This is in the form of a list
+            
+            robotSquare[0] = self.calculateDistance(robotSquare, targetSquare) # Initializes the score of robotSquare.
+            self.shortestDict[(robotSquare[2], robotSquare[3])] = None
+
+            squareHeap = []
+            heapq.heapify(squareHeap)
+            heapq.heappush(squareHeap, robotSquare)
+
+            while squareHeap:
+                startSquare = heapq.heappop(squareHeap)
+
+                for d in self.directions:
+                    # [dx, dy, dTraveled] = d
+
+                    newX = startSquare[2] + d[0]
+                    newY = startSquare[3] + d[1]
+
+                    if self.inflatedOccupancyDict.get((newX, newY), 0) > 0:
+                        continue
+
+                    newT = startSquare[1] + d[2]
+                    distance = self.calculateDistance((0, 0, newX, newY), targetSquare)
+
+                    newScore = newT + distance * 1.2
+
+                    heapq.heappush(squareHeap, [newScore, newT, newX, newY, (startSquare[2], startSquare[3])])
+                    if (newX, newY) != (robotSquare[2], robotSquare[3]):
+                        if self.shortestDict.get((newX, newY), (0, 0, np.inf))[2] > newScore:
+                            self.shortestDict[(newX, newY)] = (startSquare[2], startSquare[3], newScore)
+
+                        if (newX, newY) == (targetSquare[0], targetSquare[1]):
+                            self.determineMoveOrder(targetSquare)
+                            time.sleep(5000000)
+                            return
+
+            print("WE EXITED LOOP")
+
         
-        robotSquare[0] = self.calculateDistance(robotSquare, targetSquare) # Initializes the score of robotSquare.
-        self.shortestDict[(robotSquare[2], robotSquare[3])] = None
-
-        squareHeap = []
-        heapq.heapify(squareHeap)
-        heapq.heappush(squareHeap, robotSquare)
-
-        while squareHeap:
-            startSquare = heapq.heappop(squareHeap)
-
-            for d in self.directions:
-                # [dx, dy, dTraveled] = d
-
-                newX = startSquare[2] + d[0]
-                newY = startSquare[3] + d[1]
-
-                if self.inflatedOccupancyDict.get((newX, newY), 0) > 0:
-                    continue
-
-                newT = startSquare[1] + d[2]
-                distance = self.calculateDistance((0, 0, newX, newY), targetSquare)
-
-                newScore = newT + distance * 1.2
-
-                heapq.heappush(squareHeap, [newScore, newT, newX, newY, (startSquare[2], startSquare[3])])
-                if (newX, newY) != (robotSquare[2], robotSquare[3]):
-                    if self.shortestDict.get((newX, newY), (0, 0, np.inf))[2] > newScore:
-                        self.shortestDict[(newX, newY)] = (startSquare[2], startSquare[3], newScore)
-
-                    if (newX, newY) == (targetSquare[0], targetSquare[1]):
-                        self.determineMoveOrder(targetSquare)
-                        return
-
-        print("WE EXITED LOOP")
 
 def main(args = None):
     print("WE PATH PLANNING")

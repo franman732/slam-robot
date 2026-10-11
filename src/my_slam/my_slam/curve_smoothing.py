@@ -21,6 +21,12 @@ class curveSmoothing(Node):
             1
         )
 
+        self.derivatives_publisher = self.create_publisher (
+            Float64MultiArray,
+            '/derivatives',
+            1
+        )
+
     def getKnotPoints(self, prevKnot, p1, p0):
         return prevKnot + np.linalg.norm(p1 - p0) ** 0.5
 
@@ -48,11 +54,12 @@ class curveSmoothing(Node):
 
             pointList.append(self.calculateCurveValue(u, p1, m1, p2, m2))
 
-        return pointList
+        return pointList, [m1, m2]
 
     def smoothPath(self, message):
         wayPoints = []
         smoothedPointsList = []
+        derivativesList = []
         pInitial = None
         pFinal = None
         x = 0
@@ -71,9 +78,9 @@ class curveSmoothing(Node):
 
         for i in range(2):
             if i % 2 == 0:
-                x = 2 * wayPoints[len(wayPoints)][0] - wayPoints[len(wayPoints) - 1][0] # Extrapolates an extra point at the end for curve smoothing
+                x = 2 * wayPoints[len(wayPoints) - 1][0] - wayPoints[len(wayPoints) - 2][0] # Extrapolates an extra point at the end for curve smoothing
             else: 
-                pFinal = np.array([x, 2 * wayPoints[-1] - wayPoints[-2]])
+                pFinal = np.array([x, 2 * wayPoints[-1][1] - wayPoints[-2][1]])
         
         wayPoints.insert(0, pInitial) 
         wayPoints.append(pFinal)
@@ -86,8 +93,33 @@ class curveSmoothing(Node):
             p2 = wayPoints[i + 1]
             p3 = wayPoints[i + 2]
 
-            smoothedPointsList.extend(self.getCatmullRomPositions(p0, p1, p2, p3))
+            pointList, derivatives = self.getCatmullRomPositions(p0, p1, p2, p3)
 
-        msg = Float64MultiArray()
-        msg.data = smoothedPointsList.flatten()
-        self.smoothed_publisher.publish(msg)
+            smoothedPointsList.extend(pointList)
+            derivativesList.extend(derivatives)
+
+        print("WE PRINTING")
+
+        derivativesMsg = Float64MultiArray()
+        derivativesMsg.data = np.array(derivativesList).flatten().tolist()
+        self.derivatives_publisher.publish(derivativesMsg)
+
+        pointsMsg = Float64MultiArray()
+        pointsMsg.data = np.array(smoothedPointsList).flatten().tolist()
+        self.smoothed_publisher.publish(pointsMsg)
+
+def main(args = None):
+    print("WE CURVE SMOOTHING")
+
+    rclpy.init(args = args)
+
+    curveNode = curveSmoothing()
+
+    rclpy.spin(curveNode)
+
+    curveNode.destroy_node()
+
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
