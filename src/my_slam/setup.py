@@ -41,7 +41,8 @@ setup(
             'pathPlanning = my_slam.pathPlanning:main',
             'curve_smoothing = my_slam.curve_smoothing:main',
             'linear_velocity_calculator = my_slam.linear_velocity_calculator:main',
-            'drive_controller = my_slam.drive_controller:main'
+            'drive_controller = my_slam.drive_controller:main',
+            'path_checker = my_slam.path_checker:main'
         ],
     },
 )

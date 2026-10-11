@@ -32,7 +32,7 @@ class driveController(Node):
 
         self.spline_subscriber = self.create_subscription (
             Float64MultiArray,
-            '/smoothedPath',
+            '/correctPath',
             self.updateSpline,
             1
         )

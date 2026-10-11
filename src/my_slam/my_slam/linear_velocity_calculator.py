@@ -19,7 +19,7 @@ class calculateLinearVelocities(Node):
 
         self.smoothed_subscriber = self.create_subscription (
             Float64MultiArray,
-            '/smoothedPath',
+            '/correctPath',
             self.calculateLinearVelocities,
             1
         )

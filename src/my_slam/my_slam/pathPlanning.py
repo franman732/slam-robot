@@ -48,6 +48,12 @@ class pathPlanning(Node):
             1
         )
 
+        self.unfilteredPublisher = self.create_publisher (
+            Float64MultiArray,
+            '/unfilteredPath',
+            1
+        )
+
 
     def updateState(self, message):
         print("UPDATING STATE")
@@ -96,6 +102,11 @@ class pathPlanning(Node):
             if previousSquare == None:
                 finalMovesList.reverse()
                 self.prepareMoveList(finalMovesList)
+
+                message = Float64MultiArray()
+                message.data = np.array(finalMovesList).flatten().tolist()
+                self.unfilteredPublisher.publish(message)
+
                 break
 
             currentSquare = (previousSquare[0], previousSquare[1])
@@ -154,7 +165,7 @@ class pathPlanning(Node):
                     newX = startSquare[2] + d[0]
                     newY = startSquare[3] + d[1]
 
-                    if self.inflatedOccupancyDict.get((newX, newY), 0) > 0:
+                    if self.inflatedOccupancyDict.get((newX, newY), 1) > 0: # Make the default value 1 so that any value not inside the occupancy Dict is ignored.
                         continue
 
                     newT = startSquare[1] + d[2]
