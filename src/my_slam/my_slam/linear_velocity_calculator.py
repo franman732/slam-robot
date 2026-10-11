@@ -1,6 +1,5 @@
 import rclpy
 import numpy as np
-import math
 
 from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
@@ -11,11 +10,14 @@ class calculateLinearVelocities(Node):
 
         self.derivativesList = []
         self.pointsList = []
+        self.pendingMessage = None # A path that showed up before its matching waypoints and derivatives. It gets calculated as soon as they arrive.
 
         self.MAXACCELERATION = 0.1
-        self.MAXVELOCITY = 0.4
-        self.MAXVELOCITYANGULAR = 0.3
+        self.MAXVELOCITY = 0.5
+        self.MAXVELOCITYANGULAR = 0.6
         self.MAXBREAK = 0.1
+        self.STARTVELOCITY = 0.2 # The controller reads the velocity under the car at the start, so this can't be 0 or the car never leaves the start.
+        self.MINVELOCITY = 0.05 # Stops a sharp corner from asking for a velocity so small that the car stalls in the middle of the path.
 
         self.smoothed_subscriber = self.create_subscription (
             Float64MultiArray,
@@ -54,9 +56,12 @@ class calculateLinearVelocities(Node):
             if i % 2 == 0:
                 x = value
             else:
-                finalPointList.append([x * 0.03, value * 0.03])
+                finalPointList.append([(x + 0.5) * 0.03, (value + 0.5) * 0.03]) # The + 0.5 puts the waypoint in the center of its square, the same as the curve smoother.
 
         self.pointsList = finalPointList # Outputs a full list of all the points [p0, p1, p2, p3, ...]
+
+        if self.pendingMessage is not None:
+            self.calculateLinearVelocities(self.pendingMessage)
 
     def updateDerivatives(self, message): # This is the derivatives outputted by the path planning algorithm
         derivatives = message.data
@@ -70,7 +75,10 @@ class calculateLinearVelocities(Node):
             else:
                 derivativesList.append([M1, value])
 
-        self.derivativesList = derivativesList
+        self.derivativesList = derivativesList # Every row is one tangent [x, y]. Segment s uses row 2 * s as its first tangent and row 2 * s + 1 as its second.
+
+        if self.pendingMessage is not None:
+            self.calculateLinearVelocities(self.pendingMessage)
 
     def constructPointList(self, pointsArray): # This is the list of points outputted along the spline
         organizedPointList = []
@@ -84,35 +92,34 @@ class calculateLinearVelocities(Node):
 
         return organizedPointList
 
-    def calculateFirstDerivative(self, u, v1, v2):
-        i = math.floor(u)
+    def calculateFirstDerivative(self, u, v1, m1, v2, m2): # v1, m1, v2, m2 are all [x, y] arrays, and this returns [x', y'].
+        return ((6 * u ** 2) - 6 * u) * v1 + (( 3 * u ** 2) - 4 * u + 1) * m1 + ((-6 * u ** 2) + 6 * u) * v2 + ((3 * u ** 2) - 2 * u) * m2
 
-        M1 = self.derivativesList[i][0]
-        M2 = self.derivativesList[i][1]
-
-        return ((6 * u ** 2) - 6 * u) * v1 + (( 3 * u ** 2) - 4 * u + 1) * M1 + ((-6 * u ** 2) + 6 * u) * v2 + ((3 * u ** 2) - 2 * u) * M2
-
-    def calculateSecondDerivative(self, u, v1, v2):
-        i = math.floor(u)
-
-        M1 = self.derivativesList[i][0]
-        M2 = self.derivativesList[i][1]
-
-        return (12 * u - 6) * v1 + (6 * u  - 4) * M1 + (-12 * u + 6) * v2 + (6 * u - 2) * M2
+    def calculateSecondDerivative(self, u, v1, m1, v2, m2):
+        return (12 * u - 6) * v1 + (6 * u  - 4) * m1 + (-12 * u + 6) * v2 + (6 * u - 2) * m2
 
     def calculateLinearVelocities(self, message):
         points = np.array(message.data)
         splinePointList = self.constructPointList(points)
-    
-        velocityList = [0.2] # 1 is a placeholder here. We do not need a velocity for the starting position, since that is the position underneath the car anyways.
-        distanceList = [0]
 
-        startPointIndex = 0
+        segmentCount = (len(splinePointList) - 1) // 100
+
+        # The spline has the first point plus 100 points per segment, and every segment needs its waypoints and 2 tangents.
+        if len(splinePointList) < 2 or (len(splinePointList) - 1) % 100 != 0 or len(self.pointsList) != segmentCount + 1 or len(self.derivativesList) != 2 * segmentCount:
+            print("WAITING FOR THE MATCHING WAYPOINTS AND DERIVATIVES")
+            self.pendingMessage = message
+            return
+
+        self.pendingMessage = None
+    
+        velocityList = [self.STARTVELOCITY] # We do not need a real velocity for the starting position, since that is the position underneath the car anyways.
+        distanceList = [0.0]
 
         for i, point in enumerate(splinePointList):
             if i == 0:
                 continue
 
+            startPointIndex = (i - 1) // 100 # Which segment this point is on. This is found first so the first point of a new segment uses its own segment.
             k = (i - 1) % 100 + 1
             u = k / 100
 
@@ -121,23 +128,25 @@ class calculateLinearVelocities(Node):
 
             newDistance = previousDistance + np.sqrt((point[0] - prevoiusPoint[0]) ** 2 + (point[1] - prevoiusPoint[1]) ** 2)
 
-            xPrime1 = self.calculateFirstDerivative(u, self.pointsList[startPointIndex][0], self.pointsList[startPointIndex + 1][0])
-            yPrime1 = self.calculateFirstDerivative(u, self.pointsList[startPointIndex][1], self.pointsList[startPointIndex + 1][1])
+            p1 = np.array(self.pointsList[startPointIndex])
+            p2 = np.array(self.pointsList[startPointIndex + 1])
+            m1 = np.array(self.derivativesList[2 * startPointIndex])
+            m2 = np.array(self.derivativesList[2 * startPointIndex + 1])
 
-            xPrime2 = self.calculateSecondDerivative(u, self.pointsList[startPointIndex][0], self.pointsList[startPointIndex + 1][0])
-            yPrime2 = self.calculateSecondDerivative(u, self.pointsList[startPointIndex][1], self.pointsList[startPointIndex + 1][1])
+            firstDerivative = self.calculateFirstDerivative(u, p1, m1, p2, m2)
+            secondDerivative = self.calculateSecondDerivative(u, p1, m1, p2, m2)
 
-            curvature = np.abs(xPrime1 * yPrime2 - yPrime1 * xPrime2) / ((xPrime1 ** 2 + yPrime1 ** 2) ** (3/2))
+            speedCubed = max(np.linalg.norm(firstDerivative) ** 3, 1e-9)
+
+            curvature = np.abs(firstDerivative[0] * secondDerivative[1] - firstDerivative[1] * secondDerivative[0]) / speedCubed
 
             if abs(curvature) < 1e-6:
                 curveVel = self.MAXVELOCITY
             else:
-                curveVel = min(self.MAXVELOCITY, np.sqrt(self.MAXACCELERATION / abs(curvature)))
+                curveVel = min(self.MAXVELOCITY, np.sqrt(self.MAXACCELERATION / abs(curvature)), self.MAXVELOCITYANGULAR / abs(curvature))
 
             distanceList.append(newDistance)
-            velocityList.append(min(curveVel, self.MAXVELOCITYANGULAR / curvature))
-
-            startPointIndex = (i - 1) // 100
+            velocityList.append(max(self.MINVELOCITY, curveVel))
 
         for i, velocity in enumerate(velocityList):
             if i == 0:
@@ -148,7 +157,7 @@ class calculateLinearVelocities(Node):
 
             velocityList[i] = min(velocity, np.sqrt((prevVel) ** 2 + 2 * self.MAXACCELERATION * deltaDistance))
 
-        velocityList[-1] = 0
+        velocityList[-1] = 0.0 # The car has to stop at the end of the path. The backwards pass below spreads this out so the car brakes in time.
 
         for i in range(len(velocityList) - 2, -1, -1):
             if i == 0:
@@ -163,7 +172,7 @@ class calculateLinearVelocities(Node):
         print("WE POSTING VEOCITIES")
 
         velocityMsg = Float64MultiArray()
-        velocityMsg.data = velocityList
+        velocityMsg.data = [float(velocity) for velocity in velocityList]
         self.velocity_publisher.publish(velocityMsg)
 
 def main(args = None):
@@ -181,4 +190,3 @@ def main(args = None):
 
 if __name__ == '__main__':
     main()
-

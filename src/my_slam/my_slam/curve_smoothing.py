@@ -60,27 +60,25 @@ class curveSmoothing(Node):
         wayPoints = []
         smoothedPointsList = []
         derivativesList = []
-        pInitial = None
-        pFinal = None
         x = 0
 
         for i, value in enumerate(message.data):
             if i % 2 == 0:
-                x = value * 0.03
+                x = value
             else:
-                wayPoints.append(np.array([x, value * 0.03]))
+                wayPoints.append((np.array([x, value]) + 0.5) * 0.03) # The + 0.5 puts the waypoint in the center of its square instead of on the corner of it.
 
-        for i in range(2):
-            if i % 2 == 0:
-                x = 2 * wayPoints[0][0] - wayPoints[1][0] # Extrapolates a starting point for curve smoothing
-            else:
-                pInitial = np.array([x, 2 * wayPoints[0][1] - wayPoints[1][1]])
+        if len(wayPoints) < 2:
+            print("NEED AT LEAST TWO WAYPOINTS TO SMOOTH")
+            return
 
-        for i in range(2):
-            if i % 2 == 0:
-                x = 2 * wayPoints[len(wayPoints) - 1][0] - wayPoints[len(wayPoints) - 2][0] # Extrapolates an extra point at the end for curve smoothing
-            else: 
-                pFinal = np.array([x, 2 * wayPoints[-1][1] - wayPoints[-2][1]])
+        for i in range(1, len(wayPoints)):
+            if np.linalg.norm(wayPoints[i] - wayPoints[i - 1]) < 1e-9:
+                print("DUPLICATE WAYPOINTS, SKIPPING THIS PATH") # Two identical waypoints give a zero length segment, which divides by zero below.
+                return
+
+        pInitial = 2 * wayPoints[0] - wayPoints[1] # Extrapolates a starting point for curve smoothing
+        pFinal = 2 * wayPoints[-1] - wayPoints[-2] # Extrapolates an extra point at the end for curve smoothing
         
         wayPoints.insert(0, pInitial) 
         wayPoints.append(pFinal)

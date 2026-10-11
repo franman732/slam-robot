@@ -8,9 +8,16 @@ class pathChecker(Node):
     def __init__(self):
         super().__init__("pathChecker")
 
-        self.unfilteredPath = []
-        self.filteredPath = []
+        self.unfilteredPath = [] # Every square A* walked through, as a list of (x, y) whole squares.
+        self.cellIndex = {} # square --> its position inside unfilteredPath
+        self.filteredPath = [] # The current list of waypoints, as (x, y) whole squares.
         self.inflatedOccupancyDict = {}
+        self.pendingMessage = None # A smoothed path that showed up before the waypoints that made it. It gets checked as soon as they arrive.
+        self.passes = 0
+
+        self.SQUARESIZE = 0.03
+        self.GRACESQUARES = 4 # Spline points this close to the start are never flagged, since the robot can start inside the inflation. Keep this the same as STARTCLEARANCE in the path planner.
+        self.MAXPASSES = 40
 
         self.unfilteredSubscriber = self.create_subscription (
             Float64MultiArray,
@@ -52,94 +59,96 @@ class pathChecker(Node):
             1
         )
 
+    def toCells(self, data): # Turns a flat [x0, y0, x1, y1, ...] list into a list of (x, y) whole squares.
+        pairs = np.array(data).reshape(-1, 2)
+
+        return [(int(round(x)), int(round(y))) for x, y in pairs]
+
     def updateInflatedOccupancy(self, message): # Updates the occupancy grid, which is a dictionary of (x, y) --> log value. log value > 0.5 means occupied. x and y are in square coordinates.
-        gridList = message.data
-        x = 0
-        y = 0
+        grid = np.array(message.data).reshape(-1, 3) # Every row is [x, y, logOdds]
 
-        for i, value in enumerate(gridList):
-            identifier = (i + 1) % 3
-
-            if identifier == 1:
-                x = value
-            elif identifier == 2:
-                y = value
-            else:
-                self.inflatedOccupancyDict[(x, y)] = value
+        squares = zip(grid[:, 0].astype(int).tolist(), grid[:, 1].astype(int).tolist())
+        self.inflatedOccupancyDict = dict(zip(squares, grid[:, 2].tolist())) # A brand new dictionary every time, so squares that are no longer inflated disappear.
 
     def updateUnfilteredPath(self, message): # Updates the unfiltered path outputted by A*. This is the path that includes all the extra points between waypoints in the form of a list of points.
-        unfiltered = message.data            # All the values are in square coordinates.
-        finalUnfiltered = []
-
-        x = 0
-
-        for i, value in enumerate(unfiltered):
-            if i % 2 == 0:
-                x = value
-            else:
-                finalUnfiltered.append([x, value])
-
-        self.unfilteredPath = finalUnfiltered
+        self.unfilteredPath = self.toCells(message.data) # All the values are in square coordinates.
+        self.cellIndex = {square: i for i, square in enumerate(self.unfilteredPath)}
+        self.passes = 0 # A new A* path means a fresh start for the repair passes.
 
     def updatePath(self, message): # This function updates the filtered path outputted by A* that only includes the waypoints
-        pathMessage = message.data 
-        finalPath = []
+        self.filteredPath = self.toCells(message.data)
 
-        x = 0
-
-        for i, value in enumerate(pathMessage):
-            if i % 2 == 0:
-                x = value
-            else:
-                finalPath.append([x, value])
-
-        self.filteredPath = finalPath
+        if self.pendingMessage is not None:
+            self.checkPath(self.pendingMessage)
 
     def newWaypoint(self, lowerWaypoint, upperWaypoint): # This function takes the two waypoints containing the error point, and produces a new point to fill it.
-        foundLower = False                               
-        midIndex = 0
-        lowerIndex = 0
+        lowerIndex = self.cellIndex.get(lowerWaypoint)
+        upperIndex = self.cellIndex.get(upperWaypoint)
 
-        for i, point in enumerate(self.unfilteredPath):
-            if point == lowerWaypoint:
-                foundLower = True
-                lowerIndex = i
-                midIndex = lowerIndex
+        if lowerIndex is None or upperIndex is None or upperIndex - lowerIndex < 2:
+            return None # There is no A* square left in between these two waypoints to add.
 
-            if foundLower:
-                if (i - lowerIndex) % 2 == 0: # Every two steps forward, increase our mid position by 1.
-                    midIndex += 1
-
-            if point == upperWaypoint:
-                return self.unfilteredPath[midIndex]
-                    
-
+        return self.unfilteredPath[(lowerIndex + upperIndex) // 2]
 
     def checkPath(self, msg): # This function updates the path filled in by the spline curve smoothing. It creates a list of all the waypoints with 99 additional points in between.
-        path = msg.data       # This function has coordinates in global position. 
-        updatedPath = False
-        
-        for i, value in enumerate(path):
-            if i % 2 == 0:
-                x = np.floor(value // .03 + 1e-6)
-            else:
-                square = (x, np.floor(value // .03 + 1e-6))
+        print("WE CHECKING PATH")  # This function has coordinates in global position. 
+        pathPoints = np.array(msg.data).reshape(-1, 2)
+        waypointCount = len(self.filteredPath)
 
-                if self.inflatedOccupancyDict.get(square, 1) > 0:
-                    lowerWaypoint = path[i // 100]
-                    upperWaypoint = path[lowerWaypoint + 1]
+        # The smoother outputs the first waypoint plus 100 points for every segment, so this only checks a smoothed path that was made from the waypoints we currently have.
+        if waypointCount < 2 or len(pathPoints) != 1 + 100 * (waypointCount - 1):
+            print("SMOOTHED PATH DOES NOT MATCH THE WAYPOINTS YET, WAITING")
+            self.pendingMessage = msg
+            return
 
-                    newPoint = self.newWaypoint(lowerWaypoint, upperWaypoint)
+        self.pendingMessage = None
 
-                    self.filteredPath.insert(upperWaypoint, newPoint) # filtered path is the path outputted by A* that has only waypoints.
-                    updatedPath = True
+        if not np.isfinite(pathPoints).all():
+            print("NAN IN THE SPLINE, THERE ARE PROBABLY DUPLICATE WAYPOINTS")
+            return
 
-        if updatedPath == False:
+        squares = np.floor(pathPoints / self.SQUARESIZE).astype(int)
+        startX = int(squares[0][0])
+        startY = int(squares[0][1])
+
+        badSegments = set()
+
+        for k, square in enumerate(squares):
+            squareX = int(square[0])
+            squareY = int(square[1])
+
+            if max(abs(squareX - startX), abs(squareY - startY)) <= self.GRACESQUARES:
+                continue
+
+            if self.inflatedOccupancyDict.get((squareX, squareY), 1) > 0: # Same default as A*, so a square A* thinks is free is also free here.
+                badSegments.add(max(0, (k - 1) // 100)) # Point 0 is the start, then every segment adds 100 points.
+
+        if len(badSegments) == 0:
+            print("FINAL PATH FOUND")
             self.finalPathPublisher.publish(msg)
-        else:
-            correctedPath = Float64MultiArray()
-            correctedPath.data = np.array(self.filteredPath).flatten().tolist()
-            self.correctedPathPublisher.publish(correctedPath)
+            return
+
+        updatedPath = False
+
+        for segment in sorted(badSegments, reverse = True): # Going backwards so inserting a waypoint never shifts the segments we still have to fix.
+            newPoint = self.newWaypoint(self.filteredPath[segment], self.filteredPath[segment + 1])
+
+            if newPoint is None:
+                continue
+
+            self.filteredPath.insert(segment + 1, newPoint) # filtered path is the path outputted by A* that has only waypoints.
+            updatedPath = True
+
+        self.passes += 1
+
+        if not updatedPath or self.passes > self.MAXPASSES:
+            print("CAN'T REPAIR SEGMENTS: ", sorted(badSegments), " REPLAN WITH MORE CLEARANCE")
+            return
+
+        print("PUBLISHING CORRECTED PATH")
+        correctedPath = Float64MultiArray()
+        correctedPath.data = [float(value) for square in self.filteredPath for value in square]
+        self.correctedPathPublisher.publish(correctedPath)
 
 def main(args = None):
     print("WE CHECKING THE PATH")
@@ -156,9 +165,3 @@ def main(args = None):
 
 if __name__ == '__main__':
     main()
-
-    
-
-
-        
-

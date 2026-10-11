@@ -1,6 +1,5 @@
 import rclpy
 import numpy as np
-import sys
 
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
@@ -22,6 +21,10 @@ class occupancyGrid(Node):
         self.prevSkipped = 0
         self.skippedNum = 0
         self.INFLATIONSQUARES = 4
+
+        self.lastInflatedPublish = 0.0
+        self.PUBLISHINTERVAL = 0.5 # The inflated grid is only rebuilt and published this many seconds apart, because every other node has to parse the whole thing. Set this to 0 to publish every update.
+        self.MAXRAYSTEPS = 500 # Safety so a bad ray can never loop forever.
 
         self.scanSubscriber = self.create_subscription (
             LaserScan,
@@ -68,7 +71,7 @@ class occupancyGrid(Node):
         self.skippedNum += 1
 
         stateError = sum(newStateVector - self.stateVector)
-        if (self.NDT_Error > 0.3):
+        if (self.NDT_Error > 0.3): # Double check this one: it only updates the map when this value is HIGH. That is only right if /NDT_error is really a score where higher is better.
             #print("NDT ERROR: ", self.NDT_Error)
             self.stateVector = newStateVector
             self.updateMap()
@@ -80,6 +83,10 @@ class occupancyGrid(Node):
             print("WE SKIPPED NUMBER: ", self.skippedNum)
 
     def updateMap(self):
+        if self.internalScan is None:
+            print("NO SCAN YET, SKIPPING MAP UPDATE")
+            return
+
         xRobot = self.stateVector[0]
         yRobot = self.stateVector[1]
         tRobot = self.stateVector[2]
@@ -119,6 +126,8 @@ class occupancyGrid(Node):
             currentOccupancyX = int(xCurrent // .03) # x and y are measured relative to the bottom left of the squares.
             currentOccupancyY = int(yCurrent // .03)
 
+            stepCount = 0
+
             while True:
                 logOdds = self.occupancyDict.get((currentOccupancyX, currentOccupancyY), 0)
                 distance = np.sqrt((xCurrent - xRobot) ** 2 + (yCurrent - yRobot) ** 2)
@@ -157,8 +166,10 @@ class occupancyGrid(Node):
                 print("ANGLE: ", globalAngle)
                 print("COUNTER: ", counter)"""
 
-                if currentOccupancyY > 500:
-                    sys.exit(0)
+                stepCount += 1
+
+                if stepCount > self.MAXRAYSTEPS: # This used to be a sys.exit(0) when currentOccupancyY > 500, which killed the whole node on any far away ray.
+                    break
 
                 self.occupancyDict[(currentOccupancyX, currentOccupancyY)] = newLogOdds
 
@@ -214,35 +225,40 @@ class occupancyGrid(Node):
             #print("WE BROKE OUT!!")
 
 
-        
-        for square, logOdds in self.occupancyDict.items():
-            if logOdds > 0:
-                squareX, squareY = square
+        now = self.get_clock().now().nanoseconds / 1e9
 
-                for dx in range(-self.INFLATIONSQUARES, self.INFLATIONSQUARES + 1):
-                    for dy in range(-self.INFLATIONSQUARES, self.INFLATIONSQUARES + 1):
+        if now - self.lastInflatedPublish >= self.PUBLISHINTERVAL:
+            self.lastInflatedPublish = now
+            self.inflatedDict = {} # Rebuilt from scratch every time, so one stray hit stops inflating its area once its log odds drop back below zero.
 
-                        inflatedX = squareX + dx
-                        inflatedY = squareY + dy
+            for square, logOdds in self.occupancyDict.items():
+                if logOdds > 0:
+                    squareX, squareY = square
 
-                        self.inflatedDict[(inflatedX, inflatedY)] = 4.6
-            else:
-                if self.inflatedDict.get(square, None) == None:
-                    self.inflatedDict[square] = logOdds
+                    for dx in range(-self.INFLATIONSQUARES, self.INFLATIONSQUARES + 1):
+                        for dy in range(-self.INFLATIONSQUARES, self.INFLATIONSQUARES + 1):
 
-        inflatedFlattenedGrid = []
-        inflatedOccupancyMsg = Float64MultiArray()
+                            inflatedX = squareX + dx
+                            inflatedY = squareY + dy
 
-        dictList = list(self.inflatedDict.items())
+                            self.inflatedDict[(inflatedX, inflatedY)] = 4.6
+                else:
+                    if self.inflatedDict.get(square, None) == None:
+                        self.inflatedDict[square] = logOdds
 
-        for square in dictList:
-            inflatedFlattenedGrid.append(square[0][0])
-            inflatedFlattenedGrid.append(square[0][1])
-            inflatedFlattenedGrid.append(square[1])
+            inflatedFlattenedGrid = []
+            inflatedOccupancyMsg = Float64MultiArray()
 
-        inflatedOccupancyMsg.data = inflatedFlattenedGrid
+            dictList = list(self.inflatedDict.items())
 
-        self.inflatedOccupancyPublisher.publish(inflatedOccupancyMsg)
+            for square in dictList:
+                inflatedFlattenedGrid.append(float(square[0][0]))
+                inflatedFlattenedGrid.append(float(square[0][1]))
+                inflatedFlattenedGrid.append(float(square[1]))
+
+            inflatedOccupancyMsg.data = inflatedFlattenedGrid
+
+            self.inflatedOccupancyPublisher.publish(inflatedOccupancyMsg)
 
         # This above section is for constructing and publishing the inflated occupancy grid used for path planning.
         
@@ -274,6 +290,3 @@ def main(args = None):
 if __name__ == "__main__":
     main()
     print("WE constructing Occupancy")
-
-            
-
