@@ -98,15 +98,16 @@ class pathPlanning(Node):
             self.createPath()
 
     def needNewPath(self, message):
+        print("NEW PATH REQUEST!")
         self.updatePath = True
 
     def updateState(self, message):
-        print("UPDATING STATE")
+        #print("UPDATING STATE")
         self.stateVector = np.array(message.data)
         self.haveState = True
 
     def updateOccupancyGrid(self, message):
-        print("UPDATING OCCUPANCY GRID")
+        #print("UPDATING OCCUPANCY GRID")
         grid = np.array(message.data).reshape(-1, 3) # Every row is [x, y, logOdds]
 
         squares = zip(grid[:, 0].astype(int).tolist(), grid[:, 1].astype(int).tolist())

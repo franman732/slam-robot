@@ -21,7 +21,7 @@ class driveController(Node):
         self.MINLOOKAHEAD = 0.2 # Was a fixed 0.3. A shorter lookahead cuts corners less, but raise it again if the car starts to wobble on straight sections.
         self.LOOKAHEADGAIN = 1.0 # Lookahead distance = LOOKAHEADGAIN * linearVelocity, but never less than MINLOOKAHEAD.
         self.GOALTOLERANCE = 0.05
-        self.ENDDISTANCE = 0.2 # We move to the next path if the distance from the robot to the end square is less than .06.
+        self.ENDDISTANCE = 0.06 # We move to the next path if the distance from the robot to the end square is less than .06.
 
         self.state_subscriber = self.create_subscription (
             Float64MultiArray,
@@ -144,6 +144,9 @@ class driveController(Node):
         msg.twist.linear.x = float(linearVelocity)
         msg.twist.angular.z = float(angularVelocity)
 
+        print("FORWARD VELOCITY: ", linearVelocity)
+        print("ANGULAR VELOCITY: ", angularVelocity)
+
         self.cmd_vel_publisher.publish(msg)
 
     def controlLoop(self):
@@ -154,14 +157,7 @@ class driveController(Node):
             print("VELOCITIES DO NOT MATCH THE SPLINE YET")
             return
 
-        print("WE DRIVING")
         self.locateClosestPoint()
-
-        goalDistance = np.sqrt((self.pointList[-1][0] - self.stateVector[0]) ** 2 + (self.pointList[-1][1] - self.stateVector[1]) ** 2)
-
-        if goalDistance < self.GOALTOLERANCE or self.previousIndex >= len(self.pointList) - 1:
-            self.publishVelocity(0.0, 0.0) # We made it to the end of the path.
-            return
 
         linearVelocity = self.velocities[self.previousIndex]
 
@@ -186,14 +182,14 @@ class driveController(Node):
 
         self.publishVelocity(linearVelocity, angularVelocity)
 
-        if np.sqrt((x - self.stateVector[0]) ** 2 + (y - self.stateVector[1]) ** 2) < self.ENDDISTANCE:
+        if np.sqrt((self.pointList[-1][0] - self.stateVector[0]) ** 2 + (self.pointList[-1][1] - self.stateVector[1]) ** 2) < self.ENDDISTANCE:
             msg = Bool()
             msg.data = True
             
             self.update_path_publisher.publish(msg)
             print("NEW PATH")
         else:
-            print("DISTANCE: ", np.sqrt((x - self.stateVector[0]) ** 2 + (y - self.stateVector[1]) ** 2))
+            print("DISTANCE: ", np.sqrt((self.pointList[-1][0] - self.stateVector[0]) ** 2 + (self.pointList[-1][1] - self.stateVector[1]) ** 2))
 
 def main(args = None):
     print("WE DRIVE CONTROLLING")

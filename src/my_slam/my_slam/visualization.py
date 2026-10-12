@@ -243,7 +243,7 @@ class VoxelGridVisualizer(Node):
 
         occupancy.scale.x = self.OCCUPANCYSIZE
         occupancy.scale.y = self.OCCUPANCYSIZE
-        occupancy.scale.z = 0.1
+        occupancy.scale.z = 0.0125
 
         x = 0
         y = 0

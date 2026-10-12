@@ -20,7 +20,7 @@ class occupancyGrid(Node):
 
         self.prevSkipped = 0
         self.skippedNum = 0
-        self.INFLATIONSQUARES = 5 # already increased. It was 4 earlier
+        self.INFLATIONSQUARES = 6 # already increased. It was 4 earlier
 
         self.lastInflatedPublish = 0.0
         self.PUBLISHINTERVAL = 0.5 # The inflated grid is only rebuilt and published this many seconds apart, because every other node has to parse the whole thing. Set this to 0 to publish every update.

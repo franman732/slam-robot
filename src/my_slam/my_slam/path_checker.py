@@ -78,9 +78,6 @@ class pathChecker(Node):
     def updatePath(self, message): # This function updates the filtered path outputted by A* that only includes the waypoints
         self.filteredPath = self.toCells(message.data)
 
-        if self.pendingMessage is not None:
-            self.checkPath(self.pendingMessage)
-
     def newWaypoint(self, lowerWaypoint, upperWaypoint): # This function takes the two waypoints containing the error point, and produces a new point to fill it.
         lowerIndex = self.cellIndex.get(lowerWaypoint)
         upperIndex = self.cellIndex.get(upperWaypoint)
@@ -93,15 +90,6 @@ class pathChecker(Node):
     def checkPath(self, msg): # This function updates the path filled in by the spline curve smoothing. It creates a list of all the waypoints with 99 additional points in between.
         print("WE CHECKING PATH")  # This function has coordinates in global position. 
         pathPoints = np.array(msg.data).reshape(-1, 2)
-        waypointCount = len(self.filteredPath)
-
-        # The smoother outputs the first waypoint plus 100 points for every segment, so this only checks a smoothed path that was made from the waypoints we currently have.
-        if waypointCount < 2 or len(pathPoints) != 1 + 100 * (waypointCount - 1):
-            print("SMOOTHED PATH DOES NOT MATCH THE WAYPOINTS YET, WAITING")
-            self.pendingMessage = msg
-            return
-
-        self.pendingMessage = None
 
         if not np.isfinite(pathPoints).all():
             print("NAN IN THE SPLINE, THERE ARE PROBABLY DUPLICATE WAYPOINTS")
