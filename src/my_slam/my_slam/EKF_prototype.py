@@ -58,14 +58,14 @@ class EKF(Node):
             1
         )
 
-        self.odomSubscriber = self.create_subscription(
+        self.odom_subscriber = self.create_subscription(
             Odometry,
             '/odom',
             self.updateOdom,
             1
         )
 
-        self.NDTSubscriber = self.create_subscription(
+        self.NDT_subscriber = self.create_subscription(
             Float64MultiArray,
             '/correction',
             self.correctStateVector,

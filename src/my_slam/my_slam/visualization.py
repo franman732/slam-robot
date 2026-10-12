@@ -18,35 +18,35 @@ class VoxelGridVisualizer(Node):
         self.OCCUPANCYXOFFSET = -3.0
         self.VOXELYOFFSET = -6.0
 
-        self.voxelSubscription = self.create_subscription (
+        self.voxel_subscription = self.create_subscription (
             VoxelGrid,
             '/NDTVoxelMap',
             self.constructVizMap,
             10
         )
 
-        self.occupancySubscription = self.create_subscription (
+        self.occupancy_subscription = self.create_subscription (
             Float64MultiArray,
             '/occupancyGrid',
             self.occupancyGrid,
             1
         )
 
-        self.inflatedOccupancySubscription = self.create_subscription (
+        self.inflated_occupancy_subscription = self.create_subscription (
             Float64MultiArray,
             '/inflatedOccupancyGrid',
             self.inflatedOccupancyGrid,
             1
         )
 
-        self.stateSubscriber = self.create_subscription (
+        self.state_subscriber = self.create_subscription (
             Float64MultiArray,
             '/corrected',
             self.addCar,
             1
         )
 
-        self.frontierSubscriber = self.create_subscription (
+        self.frontier_subscriber = self.create_subscription (
             Point,
             '/frontier',
             self.addFrontier,
@@ -54,31 +54,31 @@ class VoxelGridVisualizer(Node):
         )
 
 
-        self.voxelPublisher = self.create_publisher (
+        self.voxel_publisher = self.create_publisher (
             MarkerArray,
             '/voxel_grid_visualization',
             10
         )
 
-        self.occupancyPublisher = self.create_publisher(
+        self.occupancy_publisher = self.create_publisher(
             Marker,
             '/occupancyGridVisualization',
             10
         )
 
-        self.inflatedOccupancyPublisher = self.create_publisher(
+        self.inflated_occupancy_publisher = self.create_publisher(
             Marker,
             '/inflatedGridVisualization',
             10
         )
 
-        self.carPublisher = self.create_publisher(
+        self.car_publisher = self.create_publisher(
             Marker,
             '/carVisualization',
             1
         )
 
-        self.frontierPublisher = self.create_publisher (
+        self.frontier_publisher = self.create_publisher (
             Marker,
             '/frontierVisualization',
             1
@@ -229,7 +229,7 @@ class VoxelGridVisualizer(Node):
 
             counter += 1
 
-        self.voxelPublisher.publish(markerArray)
+        self.voxel_publisher.publish(markerArray)
 
     def constructOccupancyGrid(self, message, type):
         gridList = np.array(message.data)
@@ -281,9 +281,9 @@ class VoxelGridVisualizer(Node):
                 occupancy.colors.append(c)
 
         if type == 0:
-            self.occupancyPublisher.publish(occupancy)
+            self.occupancy_publisher.publish(occupancy)
         else:
-            self.inflatedOccupancyPublisher.publish(occupancy)
+            self.inflated_occupancy_publisher.publish(occupancy)
         #print("markerArray")
 
     def addCar(self, message):
@@ -311,7 +311,7 @@ class VoxelGridVisualizer(Node):
 
         car.lifetime.sec = 0
         
-        self.carPublisher.publish(car)
+        self.car_publisher.publish(car)
 
 
     def addFrontier(self, message):
@@ -340,7 +340,7 @@ class VoxelGridVisualizer(Node):
 
         frontier.lifetime.sec = 0
 
-        self.frontierPublisher.publish(frontier)
+        self.frontier_publisher.publish(frontier)
 
 
 def main(args = None):

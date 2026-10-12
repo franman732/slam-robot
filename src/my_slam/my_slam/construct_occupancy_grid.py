@@ -20,20 +20,20 @@ class occupancyGrid(Node):
 
         self.prevSkipped = 0
         self.skippedNum = 0
-        self.INFLATIONSQUARES = 4
+        self.INFLATIONSQUARES = 5 # already increased. It was 4 earlier
 
         self.lastInflatedPublish = 0.0
         self.PUBLISHINTERVAL = 0.5 # The inflated grid is only rebuilt and published this many seconds apart, because every other node has to parse the whole thing. Set this to 0 to publish every update.
         self.MAXRAYSTEPS = 500 # Safety so a bad ray can never loop forever.
 
-        self.scanSubscriber = self.create_subscription (
+        self.scan_subscriber = self.create_subscription (
             LaserScan,
             '/scan',
             self.updateScan,
             1
         )
 
-        self.stateSubscriber = self.create_subscription (
+        self.state_subscriber = self.create_subscription (
             Float64MultiArray,
             '/corrected',
             self.updateStateVector,
@@ -47,13 +47,13 @@ class occupancyGrid(Node):
             1
         )
 
-        self.occupancyPublisher = self.create_publisher (
+        self.occupancy_publisher = self.create_publisher (
             Float64MultiArray,
             '/occupancyGrid',
             1
         )
 
-        self.inflatedOccupancyPublisher = self.create_publisher (
+        self.inflated_occupancy_publisher = self.create_publisher (
             Float64MultiArray,
             '/inflatedOccupancyGrid',
             1
@@ -258,7 +258,7 @@ class occupancyGrid(Node):
 
             inflatedOccupancyMsg.data = inflatedFlattenedGrid
 
-            self.inflatedOccupancyPublisher.publish(inflatedOccupancyMsg)
+            self.inflated_occupancy_publisher.publish(inflatedOccupancyMsg)
 
         # This above section is for constructing and publishing the inflated occupancy grid used for path planning.
         
@@ -274,7 +274,7 @@ class occupancyGrid(Node):
         occupancyMsg.data = flattenedGrid
 
         #print("publishing!!")
-        self.occupancyPublisher.publish(occupancyMsg)
+        self.occupancy_publisher.publish(occupancyMsg)
 
 def main(args = None):
     rclpy.init(args = args)

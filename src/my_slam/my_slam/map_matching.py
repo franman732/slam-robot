@@ -51,7 +51,7 @@ class scanMatching(Node):
             1
         )
 
-        self.correctionPublisher = self.create_publisher (
+        self.correction_publisher = self.create_publisher (
             Float64MultiArray,
             '/correction',
             1
@@ -259,7 +259,7 @@ class scanMatching(Node):
             # 2. Package and publish
             msg = Float64MultiArray() 
             msg.data = storageList
-            self.correctionPublisher.publish(msg)
+            self.correction_publisher.publish(msg)
 
 
 def main(args = None):

@@ -4,6 +4,7 @@ import numpy as np
 from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
 from geometry_msgs.msg import TwistStamped
+from std_msgs.msg import Bool
 
 class driveController(Node):
     def __init__(self):
@@ -14,11 +15,13 @@ class driveController(Node):
         self.pointList = []
         self.previousIndex = 0
         self.haveState = False
-        self.MAXVELOCITYANGULAR = 0.6
+
+        self.MAXVELOCITYANGULAR = 0.4
         self.SEARCHWINDOW = 300 # How many spline points ahead of previousIndex we look at for the closest point. This stops the index from jumping if the path ever passes close to itself.
         self.MINLOOKAHEAD = 0.2 # Was a fixed 0.3. A shorter lookahead cuts corners less, but raise it again if the car starts to wobble on straight sections.
         self.LOOKAHEADGAIN = 1.0 # Lookahead distance = LOOKAHEADGAIN * linearVelocity, but never less than MINLOOKAHEAD.
         self.GOALTOLERANCE = 0.05
+        self.ENDDISTANCE = 0.2 # We move to the next path if the distance from the robot to the end square is less than .06.
 
         self.state_subscriber = self.create_subscription (
             Float64MultiArray,
@@ -45,6 +48,12 @@ class driveController(Node):
             TwistStamped,
             '/cmd_vel',
             10
+        )
+
+        self.update_path_publisher = self.create_publisher (
+            Bool,
+            '/updatePath',
+            1
         )
 
         self.control_timer = self.create_timer(
@@ -176,6 +185,15 @@ class driveController(Node):
                 angularVelocity = np.sign(angularVelocity) * self.MAXVELOCITYANGULAR
 
         self.publishVelocity(linearVelocity, angularVelocity)
+
+        if np.sqrt((x - self.stateVector[0]) ** 2 + (y - self.stateVector[1]) ** 2) < self.ENDDISTANCE:
+            msg = Bool()
+            msg.data = True
+            
+            self.update_path_publisher.publish(msg)
+            print("NEW PATH")
+        else:
+            print("DISTANCE: ", np.sqrt((x - self.stateVector[0]) ** 2 + (y - self.stateVector[1]) ** 2))
 
 def main(args = None):
     print("WE DRIVE CONTROLLING")

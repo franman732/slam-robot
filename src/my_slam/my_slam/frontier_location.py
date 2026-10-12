@@ -19,28 +19,28 @@ class findFrontiers(Node):
                             (-1, 0),         (1, 0),
                             (-1, -1), (0, -1), (1, -1)]
         
-        self.stateSubscriber = self.create_subscription (
+        self.state_subscriber = self.create_subscription (
             Float64MultiArray,
             '/corrected',
             self.updateStateVector,
             1
         )
 
-        self.occupancySubscriber = self.create_subscription (
+        self.occupancy_subscriber = self.create_subscription (
             Float64MultiArray,
             '/occupancyGrid',
             self.locateFrontiers,
             1
         )
 
-        self.inflatedOccupancySubscriber = self.create_subscription (
+        self.inflated_occupancy_subscriber = self.create_subscription (
             Float64MultiArray,
             '/inflatedOccupancyGrid',
             self.updateInflatedGrid,
             1
         )
 
-        self.frontierPublisher = self.create_publisher (
+        self.frontier_publisher = self.create_publisher (
             Point,
             '/frontier',
             1
@@ -84,7 +84,7 @@ class findFrontiers(Node):
                             msg = Point()
                             msg.x = newSquare[0]
                             msg.y = newSquare[1]
-                            self.frontierPublisher.publish(msg)
+                            self.frontier_publisher.publish(msg)
 
                             return
 

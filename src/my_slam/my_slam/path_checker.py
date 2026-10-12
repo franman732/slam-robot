@@ -19,41 +19,41 @@ class pathChecker(Node):
         self.GRACESQUARES = 4 # Spline points this close to the start are never flagged, since the robot can start inside the inflation. Keep this the same as STARTCLEARANCE in the path planner.
         self.MAXPASSES = 40
 
-        self.unfilteredSubscriber = self.create_subscription (
+        self.unfiltered_subscriber = self.create_subscription (
             Float64MultiArray,
             '/unfilteredPath',
             self.updateUnfilteredPath,
             1
         )
 
-        self.filteredSubscriber = self.create_subscription (
+        self.filtered_subscriber = self.create_subscription (
             Float64MultiArray,
             '/path',
             self.updatePath,
             1
         )
 
-        self.inflatedOccupancySubscriber = self.create_subscription (
+        self.inflated_occupancy_subscriber = self.create_subscription (
             Float64MultiArray,
             '/inflatedOccupancyGrid',
             self.updateInflatedOccupancy,
             1
         ) 
 
-        self.smoothedSubscriber = self.create_subscription (
+        self.smoothed_subscriber = self.create_subscription (
             Float64MultiArray,
             '/smoothedPath',
             self.checkPath,
             1
         )
 
-        self.correctedPathPublisher = self.create_publisher (
+        self.corrected_path_publisher = self.create_publisher (
             Float64MultiArray,
             '/path',
             1
         )
 
-        self.finalPathPublisher = self.create_publisher (
+        self.final_path_publisher = self.create_publisher (
             Float64MultiArray,
             '/correctPath',
             1
@@ -125,7 +125,7 @@ class pathChecker(Node):
 
         if len(badSegments) == 0:
             print("FINAL PATH FOUND")
-            self.finalPathPublisher.publish(msg)
+            self.final_path_publisher.publish(msg)
             return
 
         updatedPath = False
@@ -148,7 +148,7 @@ class pathChecker(Node):
         print("PUBLISHING CORRECTED PATH")
         correctedPath = Float64MultiArray()
         correctedPath.data = [float(value) for square in self.filteredPath for value in square]
-        self.correctedPathPublisher.publish(correctedPath)
+        self.corrected_path_publisher.publish(correctedPath)
 
 def main(args = None):
     print("WE CHECKING THE PATH")

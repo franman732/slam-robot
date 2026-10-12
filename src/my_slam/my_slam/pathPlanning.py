@@ -5,6 +5,7 @@ import heapq
 from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
 from geometry_msgs.msg import Point
+from std_msgs.msg import Bool
 
 class pathPlanning(Node):
     def __init__(self):
@@ -13,51 +14,91 @@ class pathPlanning(Node):
         self.stateVector = np.zeros(7)
         self.inflatedOccupancyDict = {}
         self.shortestDict = {}
-        self.haveState = False
-        self.planned = False # Only one path gets planned for now, since there is no replan condition yet. Set this back to False whenever you want A* to run again.
 
+        self.haveState = False
+        self.haveTarget = False
+
+        self.targetSquare = (0, 0)
         self.startSquare = (0, 0)
         self.STARTCLEARANCE = 4 # Squares around the robot that count as free, since the robot can start inside the inflation. Keep this the same as GRACESQUARES in the path checker.
-        self.CLEARANCEWEIGHT = 1.0 # Extra cost for every blocked square touching a square. This pushes the path away from the inflated edge.
+        self.CLEARANCEWEIGHT = 1.1 # Extra cost for every blocked square touching a square. This pushes the path away from the inflated edge.
         self.MAXEXPANSIONS = 200000
+
+        self.updatePath = True
 
         self.directions = [(-1, 1, 1.41421), (0, 1, 1), (1, 1, 1.41421),
                             (-1, 0, 1),                 (1, 0, 1),
                             (-1, -1, 1.41421), (0, -1, 1), (1, -1, 1.41421)]
 
-        self.stateSubscriber = self.create_subscription (
+        self.state_subscriber = self.create_subscription (
             Float64MultiArray,
             '/corrected',
             self.updateState,
             1
         )
 
-        self.inflatedOccupancySubscriber = self.create_subscription (
+        self.inflated_occupancy_subscriber = self.create_subscription (
             Float64MultiArray,
             '/inflatedOccupancyGrid',
             self.updateOccupancyGrid,
             1
         )
 
-        self.frontierSubscriber = self.create_subscription (
+        self.frontier_subscriber = self.create_subscription (
             Point,
             '/frontier',
-            self.createPath,
+            self.updateTarget,
             1
         )
 
-        self.pathPublisher = self.create_publisher (
+        self.path_update_subscriber = self.create_subscription (
+            Bool,
+            '/updatePath',
+            self.needNewPath,
+            1
+        )
+
+        self.path_publisher = self.create_publisher (
             Float64MultiArray,
             '/path',
             1
         )
 
-        self.unfilteredPublisher = self.create_publisher (
+        self.unfiltered_publisher = self.create_publisher (
             Float64MultiArray,
             '/unfilteredPath',
             1
         )
 
+        self.pathTimer = self.create_timer(
+            0.1,
+            self.checkPathRequest
+        )
+
+    def updateTarget(self, message):
+        self.targetSquare = (int(message.x), int(message.y)) # This is in the form of a tuple of whole squares.
+        self.haveTarget = True
+
+    def checkPathRequest(self):
+        if self.updatePath:
+            if not self.haveState:
+                print("NO STATE YET, SKIPPING PATH")
+                return
+
+            if not self.haveTarget:
+                print ("NO TARGET YET")
+                return
+
+            if not self.inflatedOccupancyDict:
+                print("NO OCCUPANCY YET")
+                return
+            
+            self.updatePath = False
+
+            self.createPath()
+
+    def needNewPath(self, message):
+        self.updatePath = True
 
     def updateState(self, message):
         print("UPDATING STATE")
@@ -114,7 +155,7 @@ class pathPlanning(Node):
 
                 message = Float64MultiArray()
                 message.data = np.array(finalMovesList, dtype=float).flatten().tolist()
-                self.unfilteredPublisher.publish(message) # This is published BEFORE /path so the path checker already has every square by the time the first smoothed path comes back.
+                self.unfiltered_publisher.publish(message) # This is published BEFORE /path so the path checker already has every square by the time the first smoothed path comes back.
 
                 self.prepareMoveList(finalMovesList)
 
@@ -146,18 +187,11 @@ class pathPlanning(Node):
         
         msg = Float64MultiArray()
         msg.data = np.array(finalList, dtype=float).flatten().tolist()
-        self.pathPublisher.publish(msg)
+        self.path_publisher.publish(msg)
 
         #print("MOVELIST: ", moveList)
     
-    def createPath(self, message):
-        if not self.haveState:
-            print("NO STATE YET, SKIPPING PATH")
-            return
-
-        if self.planned:
-            return
-
+    def createPath(self):
         print("WE CREATING PATH")
         self.shortestDict.clear()
 
@@ -165,18 +199,16 @@ class pathPlanning(Node):
         startY = int(np.floor(self.stateVector[1] / .03))
         self.startSquare = (startX, startY)
 
-        targetSquare = (int(round(message.x)), int(round(message.y))) # This is in the form of a tuple of whole squares.
-
-        if targetSquare == self.startSquare:
+        if self.targetSquare == self.startSquare:
             print("WE ARE ALREADY AT THE TARGET")
             return
 
-        if self.isBlocked(targetSquare[0], targetSquare[1]):
+        if self.isBlocked(self.targetSquare[0], self.targetSquare[1]):
             print("TARGET SQUARE IS BLOCKED")
             return
 
         robotSquare = [0, 0.0, startX, startY] # squares in the queue are saved as [score, distanceTraveled, x, y]. The parent of every square lives in shortestDict.
-        robotSquare[0] = self.calculateDistance(robotSquare, targetSquare) * 1.2 # Initializes the score of robotSquare.
+        robotSquare[0] = self.calculateDistance(robotSquare, self.targetSquare) * 1.2 # Initializes the score of robotSquare.
 
         gScore = {self.startSquare: 0.0} # Cheapest known distanceTraveled for every square we have reached.
         self.shortestDict[self.startSquare] = None
@@ -194,9 +226,8 @@ class pathPlanning(Node):
             if startSquare[1] > gScore[currentSquare]: # A cheaper way to this square was found after this entry was pushed, so this entry is outdated.
                 continue
 
-            if currentSquare == targetSquare: # The goal is only checked when it is popped, which is what makes the path the cheapest one.
-                self.determineMoveOrder(targetSquare)
-                self.planned = True
+            if currentSquare == self.targetSquare: # The goal is only checked when it is popped, which is what makes the path the cheapest one.
+                self.determineMoveOrder(self.targetSquare)
                 return
 
             expandedCount += 1
@@ -228,7 +259,7 @@ class pathPlanning(Node):
                 if newT >= gScore.get((newX, newY), np.inf):
                     continue
 
-                distance = self.calculateDistance((0, 0, newX, newY), targetSquare)
+                distance = self.calculateDistance((0, 0, newX, newY), self.targetSquare)
 
                 newScore = newT + distance * 1.2
 
