@@ -5,6 +5,7 @@ from collections import deque
 
 from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Bool
 from geometry_msgs.msg import Point
 
 class findFrontiers(Node):
@@ -14,6 +15,9 @@ class findFrontiers(Node):
         self.stateVector = np.zeros(7) 
         self.occupancyDict = {}
         self.inflatedOccupancyDict = {}
+
+        self.invalidFrontierSet = set()
+        self.invalidFrontier = None
 
         self.directions = [(-1, 1), (0, 1), (1, 1),
                             (-1, 0),         (1, 0),
@@ -40,11 +44,28 @@ class findFrontiers(Node):
             1
         )
 
+        self.invalid_frontier_subscriber = self.create_subscription (
+            Point,
+            '/invalidFrontier',
+            self.addInvalidFrontier,
+            1
+        )
+
         self.frontier_publisher = self.create_publisher (
             Point,
             '/frontier',
             1
         )
+
+        self.update_path_publisher = self.create_publisher (
+            Bool,
+            '/updatePath',
+            1
+        )
+
+    def addInvalidFrontier(self, message):
+        point = (int(message.x), int(message.y))
+        self.invalidFrontier = point
 
     def updateStateVector(self, message):
         self.stateVector = np.array(message.data)
@@ -65,7 +86,8 @@ class findFrontiers(Node):
             else:
                 self.inflatedOccupancyDict[(x, y)] = value
 
-    def findBestSquareInflated(self, square):
+    def findBestSquareInflated(self, square): # square is the target square, in grid coordinates. This function takes that square, and finds the closest valid square in the inflated occupancy grid.
+        print("WE CHECKING FOR VALID FRONTIER AGAIN")
         squareQueue = deque()
         seenSet = set()
         squareQueue.append(square)
@@ -81,10 +103,23 @@ class findFrontiers(Node):
 
                     if newSquare in self.inflatedOccupancyDict:
                         if self.inflatedOccupancyDict[newSquare] < 0:
+                            if (newSquare[0], newSquare[1]) == self.invalidFrontier:
+                                print("INVALID FRONTIER ADDED -----------------------------")
+                                self.invalidFrontierSet.add((square[0], square[1]))
+                                return
+
+                            if len(self.invalidFrontierSet) > 0: # The only time where invalidFrontierSet will have an item, is if pathPlanning published that the given frontier is invalid. If that happens, we need to tell 
+                                updateMessage = Bool()           # pathPlanning to run again, which is what this publish does. 
+                                updateMessage.data = True
+                                self.update_path_publisher.publish(updateMessage)
+
+                            print("PUBLISHED VALID FRONTIER")
                             msg = Point()
                             msg.x = newSquare[0]
                             msg.y = newSquare[1]
                             self.frontier_publisher.publish(msg)
+                            self.invalidFrontierSet = set()
+                            self.invalidFrontier = None
 
                             return
 
@@ -121,7 +156,6 @@ class findFrontiers(Node):
                         continue
 
                     if newSquare in frontierSet:
-                        seenFrontierSet.add(newSquare)
                         frontierQueue.append(newSquare)
 
                 squareCounter += 1
@@ -135,24 +169,35 @@ class findFrontiers(Node):
 
             #print("WE OUT OF QUEUE")
 
-            if squareCounter > bestFrontier[2]:
+            if squareCounter > bestFrontier[2]: # This gets the mean x and mean y of the frontier.
+                #print("BEST FRONTIER: ", bestFrontier[2])
+
+                bestDist = np.inf
+
+                for square in frontierList: # This gets the actual square closest to the frontier
+                    dist = np.sqrt((meanX - square[0]) ** 2 + (meanY - square[1]) ** 2)
+
+                    if dist < bestDist:
+                        candidate = square
+                        bestDist = dist
+
+                if (candidate[0], candidate[1]) in self.invalidFrontierSet:
+                    print("INVALID FRONTIER SQUARE. SKIPPING")
+                    continue
+
+                frontierSquare = candidate
                 bestFrontier[0] = meanX
                 bestFrontier[1] = meanY
                 bestFrontier[2] = squareCounter
 
-                bestDist = np.inf
+        #print("MEANX: ", bestFrontier[0])
+        #print("MEAN Y: ", bestFrontier[1])
 
-                for square in frontierList:
-                    dist = np.sqrt((meanX - square[0]) ** 2 + (meanY - square[1]) ** 2)
-
-                    if dist < bestDist:
-                        frontierSquare = square
-                        bestDist = dist
-
-        print("MEANX: ", meanX)
-        print("MEAN Y: ", meanY)
-
-        self.findBestSquareInflated(frontierSquare)
+        if bestFrontier[2] >= 6:
+            self.findBestSquareInflated(frontierSquare)
+        else:
+            print("NUMSQUARES: ", bestFrontier[2])
+            print("WE SEARCHED EVERYTHING ALREADY WE DONE WOOOOO ------------------------")
 
     def locateFrontiers(self, message):
         #print("WERE LOCATING")

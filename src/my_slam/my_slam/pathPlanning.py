@@ -75,6 +75,12 @@ class pathPlanning(Node):
             self.checkPathRequest
         )
 
+        self.invalid_frontier_publisher = self.create_publisher (
+            Point,
+            '/invalidFrontier',
+            1
+        )
+
     def updateTarget(self, message):
         self.targetSquare = (int(message.x), int(message.y)) # This is in the form of a tuple of whole squares.
         self.haveTarget = True
@@ -269,6 +275,11 @@ class pathPlanning(Node):
                 heapq.heappush(squareHeap, [newScore, newT, newX, newY])
 
         print("WE EXITED LOOP, NO PATH FOUND")
+
+        msg = Point()
+        msg.x = float(self.targetSquare[0])
+        msg.y = float(self.targetSquare[1])
+        self.invalid_frontier_publisher.publish(msg)
 
 def main(args = None):
     print("WE PATH PLANNING")
