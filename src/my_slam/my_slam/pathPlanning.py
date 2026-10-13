@@ -14,6 +14,7 @@ class pathPlanning(Node):
         self.stateVector = np.zeros(7)
         self.inflatedOccupancyDict = {}
         self.shortestDict = {}
+        self.clearanceCache = {}
 
         self.haveState = False
         self.haveTarget = False
@@ -21,8 +22,10 @@ class pathPlanning(Node):
         self.targetSquare = (0, 0)
         self.startSquare = (0, 0)
         self.STARTCLEARANCE = 4 # Squares around the robot that count as free, since the robot can start inside the inflation. Keep this the same as GRACESQUARES in the path checker.
-        self.CLEARANCEWEIGHT = 1.1 # Extra cost for every blocked square touching a square. This pushes the path away from the inflated edge.
+        self.CLEARANCEWEIGHT = 1.3 # Extra cost for every blocked square touching a square. This pushes the path away from the inflated edge.
         self.MAXEXPANSIONS = 200000
+        self.MINCLEARANCE = 2 # A square can only be used if no known occupied square is within this many squares of it. Gaps narrower than (2 * MINCLEARANCE + 1) squares become impassable. 0 turns the rule off.
+        self.TARGETGRACE = 2 # Squares around the target where the MINCLEARANCE rule is skipped, since the target sits at the edge of the known map.
 
         self.updatePath = True
 
@@ -134,6 +137,34 @@ class pathPlanning(Node):
 
         return count
 
+    def isKnownOccupied(self, x, y): # Same as isBlocked, except a square that is not inside the occupancy dict counts as unknown instead of blocked.
+        if max(abs(x - self.startSquare[0]), abs(y - self.startSquare[1])) <= self.STARTCLEARANCE:
+            return False # Same start exemption as isBlocked.
+
+        return self.inflatedOccupancyDict.get((x, y), -1) > 0 # Default value is -1 so that unknown squares are NOT treated as occupied. Otherwise every square next to unexplored space would fail the clearance check.
+
+    def hasClearance(self, x, y): # Checks that no known occupied square is within MINCLEARANCE squares of (x, y), so the path can't squeeze through a gap that is only a square or two wide.
+        if max(abs(x - self.targetSquare[0]), abs(y - self.targetSquare[1])) <= self.TARGETGRACE:
+            return True
+
+        if (x, y) in self.clearanceCache:
+            return self.clearanceCache[(x, y)]
+
+        result = True
+
+        for dx in range(-self.MINCLEARANCE, self.MINCLEARANCE + 1):
+            for dy in range(-self.MINCLEARANCE, self.MINCLEARANCE + 1):
+                if self.isKnownOccupied(x + dx, y + dy):
+                    result = False
+                    break
+
+            if not result:
+                break
+
+        self.clearanceCache[(x, y)] = result # Every square only gets scanned once per plan.
+
+        return result
+
     def calculateDistance(self, start, target):
         dx = abs(target[0] - start[2]) # The square has score stored in position 0.
         dy = abs(target[1] - start[3])
@@ -201,6 +232,7 @@ class pathPlanning(Node):
     def createPath(self):
         print("WE CREATING PATH")
         self.shortestDict.clear()
+        self.clearanceCache.clear() # The grid changes between plans, so old clearance answers can't be reused.
 
         startX = int(np.floor(self.stateVector[0] / .03))
         startY = int(np.floor(self.stateVector[1] / .03))
@@ -250,6 +282,9 @@ class pathPlanning(Node):
                 newY = startSquare[3] + d[1]
 
                 if self.isBlocked(newX, newY):
+                    continue
+
+                if not self.hasClearance(newX, newY): # A square with a known occupied square right next to it is part of a gap that is too narrow, so A* can't use it. If this is the only way to the target, the loop ends and the target is reported as invalid below.
                     continue
 
                 if d[0] != 0 and d[1] != 0: # A diagonal move can't squeeze between two blocked squares, so both squares beside it have to be free.

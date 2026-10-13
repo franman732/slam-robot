@@ -19,6 +19,8 @@ class findFrontiers(Node):
         self.invalidFrontierSet = set()
         self.invalidFrontier = None
 
+        self.invalidFrontierCounter = 0
+
         self.directions = [(-1, 1), (0, 1), (1, 1),
                             (-1, 0),         (1, 0),
                             (-1, -1), (0, -1), (1, -1)]
@@ -63,6 +65,12 @@ class findFrontiers(Node):
             1
         )
 
+        self.stop_publisher = self.create_publisher (
+            Bool,
+            '/stopVehicle',
+            1
+        )
+
     def addInvalidFrontier(self, message):
         point = (int(message.x), int(message.y))
         self.invalidFrontier = point
@@ -103,17 +111,23 @@ class findFrontiers(Node):
 
                     if newSquare in self.inflatedOccupancyDict:
                         if self.inflatedOccupancyDict[newSquare] < 0:
+                            if self.invalidFrontierCounter > 10: 
+                                msg = Bool()
+                                msg.data = True
+                                self.stop_publisher.publish(msg)
+
                             if (newSquare[0], newSquare[1]) == self.invalidFrontier:
                                 print("INVALID FRONTIER ADDED -----------------------------")
                                 self.invalidFrontierSet.add((square[0], square[1]))
+                                self.invalidFrontierCounter += 1
                                 return
 
                             if len(self.invalidFrontierSet) > 0: # The only time where invalidFrontierSet will have an item, is if pathPlanning published that the given frontier is invalid. If that happens, we need to tell 
-                                if len(self.invalidFrontierSet) > 10: # pathPlanning to run again, which is what this publish does. 
-                                    sys.exit(0)
-                                updateMessage = Bool()           
+                                updateMessage = Bool()            # pathPlanning to run again, which is what this publish does. 
                                 updateMessage.data = True
                                 self.update_path_publisher.publish(updateMessage)
+
+                            self.invalidFrontierCounter = 0
 
                             print("PUBLISHED VALID FRONTIER")
                             msg = Point()

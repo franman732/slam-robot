@@ -97,7 +97,7 @@ class EKF(Node):
 
         self.odomAngVel = msg.twist.twist.angular.z
         self.newOdom = 1
-        self.odomVel = np.sqrt(odomVelX ** 2 + odomVelY ** 2)
+        self.odomVel = np.sqrt(odomVelX ** 2 + odomVelY ** 2) * np.sign(odomVelX)
 
     def wrapAngle(self, angle):
         return (angle + np.pi) % (2 * np.pi) - np.pi
@@ -186,15 +186,17 @@ class EKF(Node):
         # Makes linearVel either the stored state velocity, or the velocity outputted by the odometry if there is a new velocity available.
         linearVel = (stateLinearVel * abs(self.newOdom - 1) + self.newOdom * self.odomVel)
 
-        if self.odomVel < 0.001 and self.newOdom == 1:
+        if abs(self.odomVel) < 0.001 and self.newOdom == 1:
             # We are definitively stopped. Kill the velocity and ignore noisy acceleration.
             linearVel = 0
             linearAccel = linearBias # Zero out the effective acceleration
         
-        if self.odomAngVel > 0.001:
+        if abs(self.odomAngVel) > 0.001:
             angularVel = (stateAngularVel * abs(self.newOdom - 1) + self.newOdom * self.odomAngVel - angularBias)
         else:
             angularVel = angularVel - angularBias
+
+        F = self.calculateF(deltaT, linearAccel)
 
         self.stateVector[0] = xPos + linearVel * np.cos(theta) * deltaT + (1/2) * (linearAccel - linearBias) * np.cos(theta) * (deltaT ** 2)
         self.stateVector[1] = yPos + linearVel * np.sin(theta) * deltaT + (1/2) * (linearAccel - linearBias) * np.sin(theta) * (deltaT ** 2)
@@ -203,7 +205,6 @@ class EKF(Node):
         self.stateVector[4] = angularVel
         # self.stateVector values 5 and 6 are not updated in this prediction phase. They are updated during the propagation of error in correction phase.
 
-        F = self.calculateF(deltaT, linearAccel)
         Q = self.sensorNoiseMatrix #self.calculateQ(deltaT, theta)
 
         self.covarianceMatrix = F @ self.covarianceMatrix @ F.T + Q

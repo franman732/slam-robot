@@ -23,6 +23,8 @@ class driveController(Node):
         self.GOALTOLERANCE = 0.05
         self.ENDDISTANCE = 0.06 # We move to the next path if the distance from the robot to the end square is less than .06.
 
+        self.stopVehicle = False
+
         self.state_subscriber = self.create_subscription (
             Float64MultiArray,
             '/prediction',
@@ -44,6 +46,13 @@ class driveController(Node):
             1
         )
 
+        self.stop_subscriber = self.create_subscription (
+            Bool,
+            '/stopVehicle',
+            self.updateStop,
+            1
+        )
+
         self.cmd_vel_publisher = self.create_publisher(
             TwistStamped,
             '/cmd_vel',
@@ -60,6 +69,9 @@ class driveController(Node):
             1.0 / 30.0,
             self.controlLoop
         )
+
+    def updateStop(self, message):
+        self.stopVehicle = True
 
     def updateState(self, message):
         if self.haveState == False:
@@ -150,6 +162,10 @@ class driveController(Node):
         self.cmd_vel_publisher.publish(msg)
 
     def controlLoop(self):
+        if self.stopVehicle:
+            self.publishVelocity(0, 0)
+            return
+
         if len(self.velocities) == 0 or not self.haveState or len(self.pointList) == 0:
             return
 

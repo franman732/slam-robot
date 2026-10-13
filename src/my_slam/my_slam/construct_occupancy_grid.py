@@ -25,6 +25,7 @@ class occupancyGrid(Node):
         self.lastInflatedPublish = 0.0
         self.PUBLISHINTERVAL = 0.5 # The inflated grid is only rebuilt and published this many seconds apart, because every other node has to parse the whole thing. Set this to 0 to publish every update.
         self.MAXRAYSTEPS = 500 # Safety so a bad ray can never loop forever.
+        self.NDT_ERROR_MAX = .3 # Technically, this is actually a minimum because of the way I wrote my gradient descent algorithm. Whoops.
 
         self.scan_subscriber = self.create_subscription (
             LaserScan,
@@ -71,7 +72,7 @@ class occupancyGrid(Node):
         self.skippedNum += 1
 
         stateError = sum(newStateVector - self.stateVector)
-        if (self.NDT_Error > 0.3): # Double check this one: it only updates the map when this value is HIGH. That is only right if /NDT_error is really a score where higher is better.
+        if (self.NDT_Error > self.NDT_ERROR_MAX): # Double check this one: it only updates the map when this value is HIGH. That is only right if /NDT_error is really a score where higher is better.
             #print("NDT ERROR: ", self.NDT_Error)
             self.stateVector = newStateVector
             self.updateMap()
@@ -143,7 +144,7 @@ class occupancyGrid(Node):
 
                 if not maxDistance:
                     if currentOccupancyX == finalOccupancyX and currentOccupancyY == finalOccupancyY:
-                        newLogOdds = max(-4.6, min(4.6, logOdds + (2 * distScore)))
+                        newLogOdds = max(-4.6, min(4.6, logOdds + (3 * distScore)))
                         self.occupancyDict[(currentOccupancyX, currentOccupancyY)] = newLogOdds
                         #print("WE BROKE OUT!")
                         break

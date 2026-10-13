@@ -197,9 +197,8 @@ class VoxelGridVisualizer(Node):
             elipseAngle = (1/2) * np.arctan2(2 * voxel.xy_cov, voxel.x_var - voxel.y_var)
             eigenvalues, eigenvectors = np.linalg.eigh([[voxel.x_var, voxel.xy_cov], [voxel.xy_cov, voxel.y_var]])
 
-            xScale = np.sqrt(eigenvalues[1]) * 4
-            yScale = np.sqrt(eigenvalues[0]) * 4
-
+            xScale = np.sqrt(max(eigenvalues[1], 0.0)) * 4
+            yScale = np.sqrt(max(eigenvalues[0], 0.0)) * 4
             a = xScale / 2
             b = yScale / 2
 

@@ -1,5 +1,6 @@
 import rclpy
 import numpy as np
+import math
 
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
@@ -68,8 +69,7 @@ class createVoxelGrid(Node):
             newStateVector = np.array(message.data)
             self.skippedNum += 1
 
-            stateError = sum(newStateVector - self.stateVector)
-            if (self.NDT_Error > 0.15):
+            if (self.NDT_Error > 0.12):
                 #print("NDT ERROR: ", self.NDT_Error)
                 self.stateVector = newStateVector
                 self.constructGrid(self.lidarMessage)
@@ -97,7 +97,7 @@ class createVoxelGrid(Node):
 
     def constructGrid(self, message):
         for i, range in enumerate(message.ranges):
-            if range > 20: # max range set to 20 meters
+            if range > 20 or math.isnan(range): # max range set to 20 meters
                 continue
 
             angle = message.angle_min + i * message.angle_increment # This is the number, in radians, my lidar says it angle increases by each increment.

@@ -99,6 +99,7 @@ class scanMatching(Node):
             iterationCount = 0
             storageList = []
             keepUpdating = True
+            validUpdate = True
 
             while keepUpdating and iterationCount < 100:
                 robotPosVect = np.array([self.stateVector[0], self.stateVector[1]])
@@ -108,7 +109,7 @@ class scanMatching(Node):
                 totalNodes = 0
 
                 for i, lidarRange in enumerate(message.ranges):
-                    if lidarRange > 20:
+                    if lidarRange > 20 or math.isnan(lidarRange):
                         continue
                 
                     angle = message.angle_min + i * message.angle_increment # This is the number, in radians, my lidar says it angle increases by each increment.
@@ -127,13 +128,13 @@ class scanMatching(Node):
 
                     voxel = self.voxelDict.get((voxelX, voxelY), None)
 
+                    totalNodes += 1
+
                     if voxel is None:
                         #print("VOXEL X: ", voxelX, "VOXEL Y: ", voxelY)
                         #print("DICT START: ")
                         #print("VOXEL DICT: ", self.voxelDict.items())
                         continue
-
-                    totalNodes += 1
 
                     #print("WE PASSED VOXEL ERROR")
                     #print("VOXEL: ", voxel)
@@ -170,6 +171,7 @@ class scanMatching(Node):
 
                 if totalNodes < 50:
                     print("too few points")
+                    validUpdate = False
                     break
 
                 gradientNorm = gradient / totalNodes
@@ -185,24 +187,29 @@ class scanMatching(Node):
 
                 if not np.all(np.isfinite(Hessian_reg)):
                     print("invalid Hessian")
+                    validUpdate = False
                     break
 
                 if not np.all(np.isfinite(gradientNorm)):
                     print("invalid gradient")
+                    validUpdate = False
                     break
 
                 if np.min(eigenvalues) <= 0:
                     print("Hessian not positive definite")
+                    validUpdate = False
                     break
 
                 if condition > 100:
                     print("Hessian poorly conditioned")
+                    validUpdate = False
                     break
 
                 try:
                     deltaPos = -np.linalg.solve(Hessian_reg, gradientNorm)
                 except:
                     print("Hessian is still singular skipping optimization loop.")
+                    validUpdate = False
                     break # or continue/handle gracefully
 
                 """print("RAW DELTA:", deltaPos)
@@ -218,14 +225,17 @@ class scanMatching(Node):
 
                 if not np.all(np.isfinite(deltaPos)):
                     print("invalid delta")
+                    validUpdate = False
                     break
 
                 if translation_norm > self.maxTranslation:
                     print("translation step too large")
+                    validUpdate = False
                     break
 
                 if rotation_norm > self.maxRotation:
                     print("rotation step too large")
+                    validUpdate = False
                     break
                 
                 updatedVector = self.stateVector + np.append(deltaPos, [0, 0, 0, 0])
@@ -248,18 +258,19 @@ class scanMatching(Node):
 
             #print("WE HAVE EXITED LOOP")
 
-            errorMsg = Float64()
-            errorMsg.data = totalError / totalNodes
+            if validUpdate:
+                errorMsg = Float64()
+                errorMsg.data = totalError / totalNodes
 
-            self.error_publisher.publish(errorMsg)
+                self.error_publisher.publish(errorMsg)
 
-            storageList.extend(self.stateVector.flatten().tolist())
-            storageList.extend(np.linalg.pinv(Hessian).flatten().tolist())
+                storageList.extend(self.stateVector.flatten().tolist())
+                storageList.extend(np.linalg.pinv(Hessian).flatten().tolist())
 
-            # 2. Package and publish
-            msg = Float64MultiArray() 
-            msg.data = storageList
-            self.correction_publisher.publish(msg)
+                # 2. Package and publish
+                msg = Float64MultiArray() 
+                msg.data = storageList
+                self.correction_publisher.publish(msg)
 
 
 def main(args = None):
