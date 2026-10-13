@@ -12,9 +12,9 @@ class calculateLinearVelocities(Node):
         self.pointsList = []
         self.pendingMessage = None # A path that showed up before its matching waypoints and derivatives. It gets calculated as soon as they arrive.
 
-        self.MAXACCELERATION = 0.1
-        self.MAXVELOCITY = 0.5
-        self.MAXVELOCITYANGULAR = 0.4
+        self.MAXACCELERATION = 0.5
+        self.MAXVELOCITY = 0.4
+        self.MAXVELOCITYANGULAR = 0.3
         self.MAXBREAK = 0.1
         self.STARTVELOCITY = 0.2 # The controller reads the velocity under the car at the start, so this can't be 0 or the car never leaves the start.
         self.MINVELOCITY = 0.05 # Stops a sharp corner from asking for a velocity so small that the car stalls in the middle of the path.

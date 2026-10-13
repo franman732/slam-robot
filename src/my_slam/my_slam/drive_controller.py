@@ -16,7 +16,7 @@ class driveController(Node):
         self.previousIndex = 0
         self.haveState = False
 
-        self.MAXVELOCITYANGULAR = 0.4
+        self.MAXVELOCITYANGULAR = 0.3
         self.SEARCHWINDOW = 300 # How many spline points ahead of previousIndex we look at for the closest point. This stops the index from jumping if the path ever passes close to itself.
         self.MINLOOKAHEAD = 0.2 # Was a fixed 0.3. A shorter lookahead cuts corners less, but raise it again if the car starts to wobble on straight sections.
         self.LOOKAHEADGAIN = 1.0 # Lookahead distance = LOOKAHEADGAIN * linearVelocity, but never less than MINLOOKAHEAD.

@@ -109,7 +109,9 @@ class findFrontiers(Node):
                                 return
 
                             if len(self.invalidFrontierSet) > 0: # The only time where invalidFrontierSet will have an item, is if pathPlanning published that the given frontier is invalid. If that happens, we need to tell 
-                                updateMessage = Bool()           # pathPlanning to run again, which is what this publish does. 
+                                if len(self.invalidFrontierSet) > 10: # pathPlanning to run again, which is what this publish does. 
+                                    sys.exit(0)
+                                updateMessage = Bool()           
                                 updateMessage.data = True
                                 self.update_path_publisher.publish(updateMessage)
 

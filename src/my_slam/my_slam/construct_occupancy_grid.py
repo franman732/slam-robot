@@ -143,7 +143,7 @@ class occupancyGrid(Node):
 
                 if not maxDistance:
                     if currentOccupancyX == finalOccupancyX and currentOccupancyY == finalOccupancyY:
-                        newLogOdds = max(-4.6, min(4.6, logOdds + (1.5 * distScore)))
+                        newLogOdds = max(-4.6, min(4.6, logOdds + (2 * distScore)))
                         self.occupancyDict[(currentOccupancyX, currentOccupancyY)] = newLogOdds
                         #print("WE BROKE OUT!")
                         break
