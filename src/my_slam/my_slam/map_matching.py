@@ -21,6 +21,10 @@ class scanMatching(Node):
         self.maxRotation = 0.05
         self.lidarOffset = np.array([-0.032, 0.0])
 
+        self.minEigenvalue = 1e-3
+        self.degenerateRatio = 0.05
+        self.maxTotalTranslation = 0.15
+
         """stateVector:
             np.array([0,  x position
             0,  y position
@@ -101,6 +105,9 @@ class scanMatching(Node):
             keepUpdating = True
             validUpdate = True
 
+            startVector = self.stateVector.copy() # top of the if-block, before the while loop
+            matchedNodes = 0 # next to totalNodes = 0 inside the while loop
+
             while keepUpdating and iterationCount < 100:
                 robotPosVect = np.array([self.stateVector[0], self.stateVector[1]])
                 totalError = 0
@@ -131,10 +138,9 @@ class scanMatching(Node):
                     totalNodes += 1
 
                     if voxel is None:
-                        #print("VOXEL X: ", voxelX, "VOXEL Y: ", voxelY)
-                        #print("DICT START: ")
-                        #print("VOXEL DICT: ", self.voxelDict.items())
                         continue
+
+                    matchedNodes += 1
 
                     #print("WE PASSED VOXEL ERROR")
                     #print("VOXEL: ", voxel)
@@ -169,7 +175,7 @@ class scanMatching(Node):
                 #print("NUM OF NODES: ", totalNodes)
                 #print("------------------------------------------------------------")
 
-                if totalNodes < 50:
+                if matchedNodes < 50:
                     print("too few points")
                     validUpdate = False
                     break
@@ -179,13 +185,7 @@ class scanMatching(Node):
 
                 Hessian_reg = hessianNorm + self.lambdaRegress * np.eye(3)
 
-                eigenvalues = np.linalg.eigvalsh(Hessian_reg)
-                condition = np.linalg.cond(Hessian_reg)
-
-                #print("EIGENVALUES:", eigenvalues)
-                #print("CONDITION:", condition)
-
-                if not np.all(np.isfinite(Hessian_reg)):
+                if not np.all(np.isfinite(Hessian_reg)): # Moved above the eigen decomposition, since that can throw on NaN.
                     print("invalid Hessian")
                     validUpdate = False
                     break
@@ -195,22 +195,13 @@ class scanMatching(Node):
                     validUpdate = False
                     break
 
-                if np.min(eigenvalues) <= 0:
-                    print("Hessian not positive definite")
-                    validUpdate = False
-                    break
+                eigenvalues, eigenvectors = np.linalg.eigh(Hessian_reg)
 
-                if condition > 100:
-                    print("Hessian poorly conditioned")
-                    validUpdate = False
-                    break
+                # Not positive definite is normal while the guess is still off. abs() turns negative curvature into positive curvature so the step still goes downhill,
+                # and the floor stops tiny eigenvalues from making huge steps. This replaces the positive definite check, the condition check, and the solve.
+                stepEigenvalues = np.maximum(np.abs(eigenvalues), self.minEigenvalue)
 
-                try:
-                    deltaPos = -np.linalg.solve(Hessian_reg, gradientNorm)
-                except:
-                    print("Hessian is still singular skipping optimization loop.")
-                    validUpdate = False
-                    break # or continue/handle gracefully
+                deltaPos = -eigenvectors @ ((eigenvectors.T @ gradientNorm) / stepEigenvalues)
 
                 """print("RAW DELTA:", deltaPos)
                 print("RAW TRANSLATION:", np.linalg.norm(deltaPos[:2]))
@@ -257,6 +248,24 @@ class scanMatching(Node):
                     keepUpdating = False
 
             #print("WE HAVE EXITED LOOP")
+
+            if validUpdate and keepUpdating: # Ran out of iterations without settling.
+                print("did not converge")
+                validUpdate = False
+
+            if validUpdate:
+                translationEigenvalues = np.linalg.eigvalsh(hessianNorm[:2, :2]) # Only the x/y block, so the rotation row (different units) doesn't skew the ratio.
+
+                if translationEigenvalues[0] < self.minEigenvalue or translationEigenvalues[0] < self.degenerateRatio * translationEigenvalues[1]:
+                    print("scan doesn't constrain translation") # For example sliding along a corridor, or almost nothing contributing.
+                    validUpdate = False
+
+                if np.linalg.norm(self.stateVector[:2] - startVector[:2]) > self.maxTotalTranslation: # Every step is capped, but 100 capped steps aren't.
+                    print("moved too far from the prediction")
+                    validUpdate = False
+
+            if not validUpdate:
+                self.stateVector = startVector # Right now a rejected scan leaves the half-updated pose in self.stateVector.
 
             if validUpdate:
                 errorMsg = Float64()

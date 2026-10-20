@@ -1,5 +1,6 @@
 import rclpy
 import numpy as np
+import math
 
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
@@ -71,7 +72,6 @@ class occupancyGrid(Node):
         newStateVector = np.array(message.data)
         self.skippedNum += 1
 
-        stateError = sum(newStateVector - self.stateVector)
         if (self.NDT_Error > self.NDT_ERROR_MAX): # Double check this one: it only updates the map when this value is HIGH. That is only right if /NDT_error is really a score where higher is better.
             #print("NDT ERROR: ", self.NDT_Error)
             self.stateVector = newStateVector
@@ -95,7 +95,7 @@ class occupancyGrid(Node):
         for i, lidarRange in enumerate(self.internalScan.ranges):
             maxDistance = False
 
-            if not np.isfinite(lidarRange):
+            if lidarRange > 20 or math.isnan(lidarRange):
                 lidarRange = 3.5
                 maxDistance = True
 

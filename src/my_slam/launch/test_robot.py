@@ -136,5 +136,5 @@ def generate_launch_description():
     return LaunchDescription([
         gazebo_launch,
         other_nodes,
-        path_planner_node
+        #path_planner_node
     ])
