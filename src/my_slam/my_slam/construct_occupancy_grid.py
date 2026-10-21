@@ -6,12 +6,14 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float64MultiArray
 from std_msgs.msg import Float64
+from std_msgs.msg import Bool
 
 class occupancyGrid(Node):
     def __init__(self):
         super().__init__("occupancyGrid")
 
         self.internalScan = None
+        self.recentScan = None
 
         self.stateVector = np.zeros(7)
         self.occupancyDict = {}
@@ -49,6 +51,13 @@ class occupancyGrid(Node):
             1
         )
 
+        self.corrected_lidar_subscriber = self.create_subscription (
+            Bool,
+            '/correctionScan',
+            self.updateCorrectedLidar,
+            1
+        )
+
         self.occupancy_publisher = self.create_publisher (
             Float64MultiArray,
             '/occupancyGrid',
@@ -61,9 +70,11 @@ class occupancyGrid(Node):
             1
         )
         
+    def updateCorrectedLidar(self, message):
+        self.internalScan = self.recentScan
 
     def updateScan(self, message):
-        self.internalScan = message
+        self.recentScan = message
 
     def updateError(self, message):
         self.NDT_Error = message.data

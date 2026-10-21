@@ -7,6 +7,7 @@ from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float64MultiArray
 from slam_messages.msg import VoxelGrid
 from std_msgs.msg import Float64
+from std_msgs.msg import Bool
 
 class scanMatching(Node):
     def __init__(self):
@@ -52,6 +53,12 @@ class scanMatching(Node):
             VoxelGrid,
             '/NDTVoxelMap',
             self.updateVoxel,
+            1
+        )
+
+        self.correction_scan_publisher = self.create_publisher (
+            Bool,
+            'correctionScan',
             1
         )
 
@@ -106,7 +113,10 @@ class scanMatching(Node):
             validUpdate = True
 
             startVector = self.stateVector.copy() # top of the if-block, before the while loop
-            matchedNodes = 0 # next to totalNodes = 0 inside the while loop
+            
+            correctionMsg = Bool()  
+            correctionMsg.data = True # This just publishes any message to tell all the map building nodes that the scan published when this message is received is the one that matches the outputted corrected state.
+            self.correction_scan_publisher.publish(correctionMsg) 
 
             while keepUpdating and iterationCount < 100:
                 robotPosVect = np.array([self.stateVector[0], self.stateVector[1]])
@@ -114,6 +124,7 @@ class scanMatching(Node):
                 gradient = np.zeros(3)
                 Hessian =  np.zeros((3, 3))
                 totalNodes = 0
+                matchedNodes = 0 # next to totalNodes = 0 inside the while loop
 
                 for i, lidarRange in enumerate(message.ranges):
                     if lidarRange > 20 or math.isnan(lidarRange):
@@ -246,6 +257,7 @@ class scanMatching(Node):
 
                 if np.linalg.norm(deltaPos) < 0.001:
                     keepUpdating = False
+                    validUpdate = True
 
             #print("WE HAVE EXITED LOOP")
 

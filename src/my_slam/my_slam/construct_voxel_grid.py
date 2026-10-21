@@ -8,6 +8,7 @@ from std_msgs.msg import Float64MultiArray
 from slam_messages.msg import VoxelGrid
 from slam_messages.msg import Voxel
 from std_msgs.msg import Float64
+from std_msgs.msg import Bool
 
 class createVoxelGrid(Node):
     def __init__(self):
@@ -26,6 +27,7 @@ class createVoxelGrid(Node):
         self.finalVoxelDict = {} # hash (x, y) --> x, y, mean vector, covarianceMatrix
         self.infoDict = {} # hash (x, y) --> total # of elements, mean vector, product matrix 
         self.lidarOffset = np.array([-0.032, 0.0])
+        self.workingScan = None
 
         self.buildCounter = 0
 
@@ -38,6 +40,13 @@ class createVoxelGrid(Node):
             LaserScan,
             '/scan',
             self.updateLidarScan,
+            1
+        )
+
+        self.corrected_lidar_subscriber = self.create_subscription (
+            Bool,
+            '/correctionScan',
+            self.updateCorrectedLidar,
             1
         )
 
@@ -72,7 +81,7 @@ class createVoxelGrid(Node):
             if (self.NDT_Error > 0.12):
                 #print("NDT ERROR: ", self.NDT_Error)
                 self.stateVector = newStateVector
-                self.constructGrid(self.lidarMessage)
+                self.constructGrid(self.workingScan)
                 self.prevSkipped = self.skippedNum
             else:
                 if self.NDT_Error > 0.2:
@@ -87,6 +96,8 @@ class createVoxelGrid(Node):
         else:
             self.buildCounter += 1
 
+    def updateCorrectedLidar(self, message): # All this does is ensure we use the scan associated with the EKF output to build the map. This ensures we dont use a new scan with an old EKF reading.
+        self.workingScan = self.lidarMessage
 
     def updateLidarScan(self, message):
         if self.lidarMessage == None:
