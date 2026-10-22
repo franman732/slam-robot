@@ -281,7 +281,7 @@ class scanMatching(Node):
 
             if validUpdate:
                 errorMsg = Float64()
-                errorMsg.data = totalError / totalNodes
+                errorMsg.data = totalError / matchedNodes
 
                 self.error_publisher.publish(errorMsg)
 

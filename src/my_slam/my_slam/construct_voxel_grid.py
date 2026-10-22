@@ -31,9 +31,6 @@ class createVoxelGrid(Node):
 
         self.buildCounter = 0
 
-        self.prevSkipped = 0
-        self.skippedNum = 0
-
         self.NDT_Error = 0
 
         self.lidar_subscriber = self.create_subscription (
@@ -74,15 +71,18 @@ class createVoxelGrid(Node):
         self.NDT_Error = message.data
 
     def updateMap(self, message):
-        if self.buildCounter != 0:
-            newStateVector = np.array(message.data)
-            self.skippedNum += 1
+        newStateVector = np.array(message.data)
 
-            if (self.NDT_Error > 0.12):
-                #print("NDT ERROR: ", self.NDT_Error)
+        if self.buildCounter != 0:
+            if (self.NDT_Error > 0.25) and (self.NDT_Error < 1):
+                diff = np.sum(np.abs(newStateVector[:2] - self.stateVector[:2]))
+                
+                if diff < .06:
+                    #print("NDT ERROR: ", self.NDT_Error)
+                    self.stateVector = newStateVector
+                    self.constructGrid(self.workingScan)
+
                 self.stateVector = newStateVector
-                self.constructGrid(self.workingScan)
-                self.prevSkipped = self.skippedNum
             else:
                 if self.NDT_Error > 0.2:
                     print("NDT ERROR TOO BIG -------------------------------------------------")
@@ -91,10 +91,9 @@ class createVoxelGrid(Node):
                     self.stateVector = newStateVector
                     self.constructGrid(self.lidarMessage)
                     self.prevSkipped = self.skippedNum"""
-
-                print("WE SKIPPED NUMBER: ", self.skippedNum)
         else:
             self.buildCounter += 1
+            self.stateVector = newStateVector
 
     def updateCorrectedLidar(self, message): # All this does is ensure we use the scan associated with the EKF output to build the map. This ensures we dont use a new scan with an old EKF reading.
         self.workingScan = self.lidarMessage
