@@ -106,7 +106,6 @@ class calculateLinearVelocities(Node):
 
         # The spline has the first point plus 100 points per segment, and every segment needs its waypoints and 2 tangents.
         if len(splinePointList) < 2 or (len(splinePointList) - 1) % 100 != 0 or len(self.pointsList) != segmentCount + 1 or len(self.derivativesList) != 2 * segmentCount:
-            print("WAITING FOR THE MATCHING WAYPOINTS AND DERIVATIVES")
             self.pendingMessage = message
             return
 
@@ -168,8 +167,6 @@ class calculateLinearVelocities(Node):
             maxVChange = np.sqrt(velocityList[i + 1] ** 2 + 2 * self.MAXBREAK * deltaDistance)
 
             velocityList[i] = min(velocityList[i], maxVChange)
-
-        print("WE POSTING VEOCITIES")
 
         velocityMsg = Float64MultiArray()
         velocityMsg.data = [float(velocity) for velocity in velocityList]

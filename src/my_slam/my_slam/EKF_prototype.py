@@ -211,9 +211,6 @@ class EKF(Node):
 
         msg = Float64MultiArray()
         msg.data = self.stateVector.flatten().tolist()
-        #print("predicted X: ", self.stateVector[0])
-        #print("Predicted Y: ", self.stateVector[1])
-        #print("Preidcted Rotation: ", self.stateVector[2])
 
         self.prediction_publisher.publish(msg)
         self.startTime = time.perf_counter()
@@ -234,18 +231,12 @@ class EKF(Node):
         # Slice the remaining 9 elements and reshape them back into a 3x3 matrix
         lidarUncertainty = data_array[7:16].reshape((3, 3))
 
-        #print("LIDARVECTOR: ", lidarVector)
-        #print("IDAR UNCERTAINTY: ", lidarUncertainty)
-
         residualVector = lidarVector[:3] - self.stateVector[:3]
         residualVector[2] = self.wrapAngle(residualVector[2])
 
         innovationCovariance = self.HMatrix @ self.covarianceMatrix @ self.HMatrix.T + lidarUncertainty
         
         kalmanGain = self.covarianceMatrix @ self.HMatrix.T @ np.linalg.inv(innovationCovariance)
-
-        #print("KALMAN GAIN: ", kalmanGain)
-        #print("RESIDUAL VECTOR: ", residualVector)
 
         self.stateVector = self.stateVector.T + kalmanGain @ residualVector.T
         self.stateVector[2] = self.wrapAngle(self.stateVector[2])
@@ -261,6 +252,8 @@ class EKF(Node):
         print("corrected rotation: ", self.stateVector[2])  
 
 def main(args = None):
+    print("WE running EKF")
+    
     rclpy.init(args=args)
 
     newNode = EKF()
@@ -273,4 +266,3 @@ def main(args = None):
 
 if __name__ == "__main__":
     main()
-    print("WE running EKF")

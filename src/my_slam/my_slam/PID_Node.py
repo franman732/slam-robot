@@ -1,3 +1,5 @@
+# This node has been decomissioned. It is no longer used, and has been replaced by velocity profiles built in the linear_velocity_calculator node.
+
 import rclpy
 import numpy as np
 from rclpy.node import Node

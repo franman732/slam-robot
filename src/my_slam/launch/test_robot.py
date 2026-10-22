@@ -31,13 +31,6 @@ def generate_launch_description():
         output='screen'
     )
 
-    PID_node = Node(
-        package='my_slam',
-        executable='PID_Node',
-        name='PID_Node',
-        output='screen'
-    )
-
     voxel_construction_node = Node(
         package='my_slam',
         executable='construct_voxel_grid',
@@ -114,7 +107,6 @@ def generate_launch_description():
             EKF_Node,
             voxel_construction_node,
             map_matching_node,
-            PID_node,
             visualization_node,
             occupancy_node,
             frontier_node,
@@ -136,5 +128,5 @@ def generate_launch_description():
     return LaunchDescription([
         gazebo_launch,
         other_nodes,
-        #path_planner_node
+        path_planner_node
     ])

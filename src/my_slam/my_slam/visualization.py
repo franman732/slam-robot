@@ -18,6 +18,9 @@ class VoxelGridVisualizer(Node):
         self.OCCUPANCYXOFFSET = -3.0
         self.VOXELYOFFSET = -6.0
 
+        self.VOXELSIZE = 0.2
+        self.OCCUPANCYSIZE = 0.03
+
         self.voxel_subscription = self.create_subscription (
             VoxelGrid,
             '/NDTVoxelMap',
@@ -83,9 +86,6 @@ class VoxelGridVisualizer(Node):
             '/frontierVisualization',
             1
         )
-
-        self.VOXELSIZE = 0.2
-        self.OCCUPANCYSIZE = 0.03
 
     def occupancyGrid(self, message):
         self.constructOccupancyGrid(message, 0)
@@ -197,7 +197,7 @@ class VoxelGridVisualizer(Node):
             elipseAngle = (1/2) * np.arctan2(2 * voxel.xy_cov, voxel.x_var - voxel.y_var)
             eigenvalues, eigenvectors = np.linalg.eigh([[voxel.x_var, voxel.xy_cov], [voxel.xy_cov, voxel.y_var]])
 
-            xScale = np.sqrt(max(eigenvalues[1], 0.0)) * 4
+            xScale = np.sqrt(max(eigenvalues[1], 0.0)) * 4 #eigenvalues define the lengths on the principle axis of the covariance elipse
             yScale = np.sqrt(max(eigenvalues[0], 0.0)) * 4
             a = xScale / 2
             b = yScale / 2
@@ -283,7 +283,6 @@ class VoxelGridVisualizer(Node):
             self.occupancy_publisher.publish(occupancy)
         else:
             self.inflated_occupancy_publisher.publish(occupancy)
-        #print("markerArray")
 
     def addCar(self, message):
         stateVector = np.array(message.data)

@@ -78,19 +78,10 @@ class createVoxelGrid(Node):
                 diff = np.sum(np.abs(newStateVector[:2] - self.stateVector[:2]))
                 
                 if diff < .06:
-                    #print("NDT ERROR: ", self.NDT_Error)
                     self.stateVector = newStateVector
                     self.constructGrid(self.workingScan)
 
                 self.stateVector = newStateVector
-            else:
-                if self.NDT_Error > 0.2:
-                    print("NDT ERROR TOO BIG -------------------------------------------------")
-
-                """if (self.skippedNum - self.prevSkipped > 12):
-                    self.stateVector = newStateVector
-                    self.constructGrid(self.lidarMessage)
-                    self.prevSkipped = self.skippedNum"""
         else:
             self.buildCounter += 1
             self.stateVector = newStateVector
@@ -171,6 +162,8 @@ class createVoxelGrid(Node):
 
 
 def main(args = None):
+    print("WE running voxel grid creation")
+    
     rclpy.init(args=args)
 
     newNode = createVoxelGrid()
@@ -183,4 +176,3 @@ def main(args = None):
 
 if __name__ == "__main__":
     main()
-    print("WE running voxel grid creation")

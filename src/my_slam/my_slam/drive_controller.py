@@ -74,20 +74,14 @@ class driveController(Node):
         self.stopVehicle = True
 
     def updateState(self, message):
-        if self.haveState == False:
-            print("UPDATED STATE")
         self.stateVector = np.array(message.data)
         self.haveState = True
 
     def updateVelocities(self, message):
-        if self.velocities == []:
-            print("UPDATING VELOCITIES")
         self.velocities = list(message.data)
         self.previousIndex = 0
 
     def updateSpline(self, message):
-        if self.pointList == []:
-            print("UPDATING SPLINE")
         points = []
         x = 0
 
@@ -156,9 +150,6 @@ class driveController(Node):
         msg.twist.linear.x = float(linearVelocity)
         msg.twist.angular.z = float(angularVelocity)
 
-        print("FORWARD VELOCITY: ", linearVelocity)
-        print("ANGULAR VELOCITY: ", angularVelocity)
-
         self.cmd_vel_publisher.publish(msg)
 
     def controlLoop(self):
@@ -170,7 +161,6 @@ class driveController(Node):
             return
 
         if len(self.velocities) != len(self.pointList): # /velocity and /correctPath arrive separately, so wait until both belong to the same path.
-            print("VELOCITIES DO NOT MATCH THE SPLINE YET")
             return
 
         self.locateClosestPoint()
@@ -203,9 +193,6 @@ class driveController(Node):
             msg.data = True
             
             self.update_path_publisher.publish(msg)
-            print("NEW PATH")
-        else:
-            print("DISTANCE: ", np.sqrt((self.pointList[-1][0] - self.stateVector[0]) ** 2 + (self.pointList[-1][1] - self.stateVector[1]) ** 2))
 
 def main(args = None):
     print("WE DRIVE CONTROLLING")

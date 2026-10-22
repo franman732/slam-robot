@@ -69,12 +69,10 @@ class curveSmoothing(Node):
                 wayPoints.append((np.array([x, value]) + 0.5) * 0.03) # The + 0.5 puts the waypoint in the center of its square instead of on the corner of it.
 
         if len(wayPoints) < 2:
-            print("NEED AT LEAST TWO WAYPOINTS TO SMOOTH")
             return
 
         for i in range(1, len(wayPoints)):
-            if np.linalg.norm(wayPoints[i] - wayPoints[i - 1]) < 1e-9:
-                print("DUPLICATE WAYPOINTS, SKIPPING THIS PATH") # Two identical waypoints give a zero length segment, which divides by zero below.
+            if np.linalg.norm(wayPoints[i] - wayPoints[i - 1]) < 1e-9: # Two identical waypoints give a zero length segment, which divides by zero
                 return
 
         pInitial = 2 * wayPoints[0] - wayPoints[1] # Extrapolates a starting point for curve smoothing
@@ -95,8 +93,6 @@ class curveSmoothing(Node):
 
             smoothedPointsList.extend(pointList)
             derivativesList.extend(derivatives)
-
-        print("WE PRINTING")
 
         derivativesMsg = Float64MultiArray()
         derivativesMsg.data = np.array(derivativesList).flatten().tolist()

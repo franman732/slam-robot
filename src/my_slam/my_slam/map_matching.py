@@ -112,7 +112,7 @@ class scanMatching(Node):
             keepUpdating = True
             validUpdate = True
 
-            startVector = self.stateVector.copy() # top of the if-block, before the while loop
+            startVector = self.stateVector.copy()
             
             correctionMsg = Bool()  
             correctionMsg.data = True # This just publishes any message to tell all the map building nodes that the scan published when this message is received is the one that matches the outputted corrected state.
@@ -124,7 +124,7 @@ class scanMatching(Node):
                 gradient = np.zeros(3)
                 Hessian =  np.zeros((3, 3))
                 totalNodes = 0
-                matchedNodes = 0 # next to totalNodes = 0 inside the while loop
+                matchedNodes = 0
 
                 for i, lidarRange in enumerate(message.ranges):
                     if lidarRange > 20 or math.isnan(lidarRange):
@@ -133,13 +133,10 @@ class scanMatching(Node):
                     angle = message.angle_min + i * message.angle_increment # This is the number, in radians, my lidar says it angle increases by each increment.
 
                     changePosVect = np.array([lidarRange * np.cos(angle), lidarRange * np.sin(angle)])
-                    #print("CHANGEPOSVECT: ", changePosVect)
 
                     basePoint = changePosVect + self.lidarOffset
 
                     truePosVect = [[np.cos(self.stateVector[2]), -np.sin(self.stateVector[2])], [np.sin(self.stateVector[2]), np.cos(self.stateVector[2])]] @ basePoint + robotPosVect # True position represented as a vector.
-
-                    #print("TRUE POS VECT: ", truePosVect)
 
                     voxelX = truePosVect[0] // self.voxelSize
                     voxelY = truePosVect[1] // self.voxelSize
@@ -152,9 +149,6 @@ class scanMatching(Node):
                         continue
 
                     matchedNodes += 1
-
-                    #print("WE PASSED VOXEL ERROR")
-                    #print("VOXEL: ", voxel)
 
                     covarianceMatrix = voxel[1]
                     covarianceMatrixReg = covarianceMatrix + np.eye(2) * 1e-4
@@ -170,8 +164,6 @@ class scanMatching(Node):
                     error = math.exp(-distance / 2)
                     totalError += error
 
-                    #print("TOTAL ERROR: ---------------", totalError)
-
                     J = self.calculateJ(basePoint[0], basePoint[1], self.stateVector[2])
                     h = self.calculateH(basePoint[0], basePoint[1], self.stateVector[2])
                     S = self.calculateS(J, A, truePosVect, mean)
@@ -180,11 +172,6 @@ class scanMatching(Node):
 
                     gradient += error * S
                     Hessian += error * (Q - np.outer(S, S))
-
-                #print("PRE UPDATE HESSIAN: ", Hessian)
-                #print("PRE UPDATE GRADIENT: ", gradient)
-                #print("NUM OF NODES: ", totalNodes)
-                #print("------------------------------------------------------------")
 
                 if matchedNodes < 50:
                     print("too few points")
@@ -196,13 +183,11 @@ class scanMatching(Node):
 
                 Hessian_reg = hessianNorm + self.lambdaRegress * np.eye(3)
 
-                if not np.all(np.isfinite(Hessian_reg)): # Moved above the eigen decomposition, since that can throw on NaN.
-                    print("invalid Hessian")
+                if not np.all(np.isfinite(Hessian_reg)): 
                     validUpdate = False
                     break
 
                 if not np.all(np.isfinite(gradientNorm)):
-                    print("invalid gradient")
                     validUpdate = False
                     break
 
@@ -214,43 +199,23 @@ class scanMatching(Node):
 
                 deltaPos = -eigenvectors @ ((eigenvectors.T @ gradientNorm) / stepEigenvalues)
 
-                """print("RAW DELTA:", deltaPos)
-                print("RAW TRANSLATION:", np.linalg.norm(deltaPos[:2]))
-
-                print("------------------------------------------------------------")
-                print("POST UPDATE HESSIAN: ", Hessian_reg)
-                print("POST UPDATE GRADIENT: ", gradientNorm)
-                print("-----------------------------------------------------------")"""
-
                 translation_norm = np.linalg.norm(deltaPos[:2])
                 rotation_norm = abs(deltaPos[2])
 
                 if not np.all(np.isfinite(deltaPos)):
-                    print("invalid delta")
                     validUpdate = False
                     break
 
                 if translation_norm > self.maxTranslation:
-                    print("translation step too large")
                     validUpdate = False
                     break
 
                 if rotation_norm > self.maxRotation:
-                    print("rotation step too large")
                     validUpdate = False
                     break
                 
                 updatedVector = self.stateVector + np.append(deltaPos, [0, 0, 0, 0])
                 updatedVector[2] = self.wrapAngle(updatedVector[2])
-                
-                #print("PREVIOUS X: ", self.stateVector[0])
-                #print("NEW X: ", updatedVector[0])
-                """print("ERROR: ", totalError)
-                print("-----------------------------------------------------------")
-                print("HESSIAN: ", hessianNorm)
-                print("-----------------------------------------------------------")
-                print("GRADIENT: ", gradientNorm)
-                print("-----------------------------------------------------------")"""
                 
                 self.stateVector = updatedVector
                 iterationCount += 1
@@ -261,19 +226,16 @@ class scanMatching(Node):
 
             #print("WE HAVE EXITED LOOP")
 
-            if validUpdate and keepUpdating: # Ran out of iterations without settling.
-                print("did not converge")
+            if validUpdate and keepUpdating: # Ran out of iterations without converging.
                 validUpdate = False
 
             if validUpdate:
-                translationEigenvalues = np.linalg.eigvalsh(hessianNorm[:2, :2]) # Only the x/y block, so the rotation row (different units) doesn't skew the ratio.
+                translationEigenvalues = np.linalg.eigvalsh(hessianNorm[:2, :2]) # Only the x/y block, so the rotation row doesn't skew the ratio.
 
-                if translationEigenvalues[0] < self.minEigenvalue or translationEigenvalues[0] < self.degenerateRatio * translationEigenvalues[1]:
-                    print("scan doesn't constrain translation") # For example sliding along a corridor, or almost nothing contributing.
+                if translationEigenvalues[0] < self.minEigenvalue or translationEigenvalues[0] < self.degenerateRatio * translationEigenvalues[1]: # Error for sliding along a corridor, or almost nothing contributing.
                     validUpdate = False
 
                 if np.linalg.norm(self.stateVector[:2] - startVector[:2]) > self.maxTotalTranslation: # Every step is capped, but 100 capped steps aren't.
-                    print("moved too far from the prediction")
                     validUpdate = False
 
             if not validUpdate:
@@ -295,6 +257,8 @@ class scanMatching(Node):
 
 
 def main(args = None):
+    print("WE RUNNING MAP MATCHING!")
+
     rclpy.init(args=args)
 
     newNode = scanMatching()
@@ -306,5 +270,4 @@ def main(args = None):
     rclpy.shutdown()
 
 if __name__ == "__main__":
-    print("WE RUNNING MAP MATCHING!")
     main()

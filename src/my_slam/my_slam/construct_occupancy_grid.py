@@ -84,19 +84,12 @@ class occupancyGrid(Node):
         self.skippedNum += 1
 
         if (self.NDT_Error > self.NDT_ERROR_MAX): # Double check this one: it only updates the map when this value is HIGH. That is only right if /NDT_error is really a score where higher is better.
-            #print("NDT ERROR: ", self.NDT_Error)
             self.stateVector = newStateVector
             self.updateMap()
             self.prevSkipped = self.skippedNum
-        else:
-            if self.NDT_Error > 0.2:
-                print("NDT ERROR TOO BIG -------------------------------------------------")
-
-            print("WE SKIPPED NUMBER: ", self.skippedNum)
 
     def updateMap(self):
         if self.internalScan is None:
-            print("NO SCAN YET, SKIPPING MAP UPDATE")
             return
 
         xRobot = self.stateVector[0]
@@ -145,10 +138,6 @@ class occupancyGrid(Node):
                 distance = np.sqrt((xCurrent - xRobot) ** 2 + (yCurrent - yRobot) ** 2)
 
                 if distance > self.maxRange:
-                    #print("TOO FARR -------------")
-                    #print("DISTANCE: ", distance)
-                    #print("XCURRENT: ", xCurrent)
-                    #print("YCURRENT: ", yCurrent)
                     break
 
                 distScore = 1 - distance / self.maxRange
@@ -157,7 +146,6 @@ class occupancyGrid(Node):
                     if currentOccupancyX == finalOccupancyX and currentOccupancyY == finalOccupancyY:
                         newLogOdds = max(-4.6, min(4.6, logOdds + (3 * distScore)))
                         self.occupancyDict[(currentOccupancyX, currentOccupancyY)] = newLogOdds
-                        #print("WE BROKE OUT!")
                         break
                     else:
                         newLogOdds = max(-4.6, min(4.6, logOdds - distScore))
@@ -168,15 +156,6 @@ class occupancyGrid(Node):
                         break
                     else:
                         newLogOdds = max(-4.6, min(4.6, logOdds - distScore))
-
-                """print("CURRENT OCCUPANCY X: ", currentOccupancyX)
-                print("CURRENT OCCUPANCY Y: ", currentOccupancyY)
-
-                print("FINAL OCCUPANCY X: ", finalOccupancyX)
-                print("FINAL OCCUPANCY Y: ", finalOccupancyY)
-
-                print("ANGLE: ", globalAngle)
-                print("COUNTER: ", counter)"""
 
                 stepCount += 1
 
@@ -234,9 +213,6 @@ class occupancyGrid(Node):
                         currentOccupancyY -= 1
                         nextOccupancyY = currentOccupancyY * 0.03
 
-            #print("WE BROKE OUT!!")
-
-
         now = self.get_clock().now().nanoseconds / 1e9
 
         if now - self.lastInflatedPublish >= self.PUBLISHINTERVAL:
@@ -285,10 +261,11 @@ class occupancyGrid(Node):
 
         occupancyMsg.data = flattenedGrid
 
-        #print("publishing!!")
         self.occupancy_publisher.publish(occupancyMsg)
 
 def main(args = None):
+    print("WE constructing Occupancy")
+    
     rclpy.init(args = args)
 
     newNode = occupancyGrid()
@@ -301,4 +278,3 @@ def main(args = None):
 
 if __name__ == "__main__":
     main()
-    print("WE constructing Occupancy")

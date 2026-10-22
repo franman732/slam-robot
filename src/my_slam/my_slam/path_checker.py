@@ -87,12 +87,10 @@ class pathChecker(Node):
 
         return self.unfilteredPath[(lowerIndex + upperIndex) // 2]
 
-    def checkPath(self, msg): # This function updates the path filled in by the spline curve smoothing. It creates a list of all the waypoints with 99 additional points in between.
-        print("WE CHECKING PATH")  # This function has coordinates in global position. 
+    def checkPath(self, msg): # This function updates the path filled in by the spline curve smoothing. It creates a list of all the waypoints with 99 additional points in between. # This function has coordinates in global position. 
         pathPoints = np.array(msg.data).reshape(-1, 2)
 
         if not np.isfinite(pathPoints).all():
-            print("NAN IN THE SPLINE, THERE ARE PROBABLY DUPLICATE WAYPOINTS")
             return
 
         squares = np.floor(pathPoints / self.SQUARESIZE).astype(int)
@@ -112,7 +110,6 @@ class pathChecker(Node):
                 badSegments.add(max(0, (k - 1) // 100)) # Point 0 is the start, then every segment adds 100 points.
 
         if len(badSegments) == 0:
-            print("FINAL PATH FOUND")
             self.final_path_publisher.publish(msg)
             return
 
@@ -130,10 +127,8 @@ class pathChecker(Node):
         self.passes += 1
 
         if not updatedPath or self.passes > self.MAXPASSES:
-            print("CAN'T REPAIR SEGMENTS: ", sorted(badSegments), " REPLAN WITH MORE CLEARANCE")
             return
 
-        print("PUBLISHING CORRECTED PATH")
         correctedPath = Float64MultiArray()
         correctedPath.data = [float(value) for square in self.filteredPath for value in square]
         self.corrected_path_publisher.publish(correctedPath)

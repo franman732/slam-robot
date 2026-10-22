@@ -23,8 +23,7 @@ class pathPlanning(Node):
         self.startSquare = (0, 0)
         self.STARTCLEARANCE = 4 # Squares around the robot that count as free, since the robot can start inside the inflation. Keep this the same as GRACESQUARES in the path checker.
         self.CLEARANCEWEIGHT = 1.3 # Extra cost for every blocked square touching a square. This pushes the path away from the inflated edge.
-        self.MAXEXPANSIONS = 200000
-        self.MINCLEARANCE = 2 # A square can only be used if no known occupied square is within this many squares of it. Gaps narrower than (2 * MINCLEARANCE + 1) squares become impassable. 0 turns the rule off.
+        self.MINCLEARANCE = 2 # A square can only be used if no known occupied square is within this many squares of it. gaps smaller than (2 * MINCLEARANCE + 1) squares become unpassable. 0 turns the rule off.
         self.TARGETGRACE = 2 # Squares around the target where the MINCLEARANCE rule is skipped, since the target sits at the edge of the known map.
 
         self.updatePath = True
@@ -91,15 +90,12 @@ class pathPlanning(Node):
     def checkPathRequest(self):
         if self.updatePath:
             if not self.haveState:
-                print("NO STATE YET, SKIPPING PATH")
                 return
 
             if not self.haveTarget:
-                print ("NO TARGET YET")
                 return
 
             if not self.inflatedOccupancyDict:
-                print("NO OCCUPANCY YET")
                 return
             
             self.updatePath = False
@@ -107,24 +103,21 @@ class pathPlanning(Node):
             self.createPath()
 
     def needNewPath(self, message):
-        print("NEW PATH REQUEST!")
         self.updatePath = True
 
     def updateState(self, message):
-        #print("UPDATING STATE")
         self.stateVector = np.array(message.data)
         self.haveState = True
 
     def updateOccupancyGrid(self, message):
-        #print("UPDATING OCCUPANCY GRID")
         grid = np.array(message.data).reshape(-1, 3) # Every row is [x, y, logOdds]
 
         squares = zip(grid[:, 0].astype(int).tolist(), grid[:, 1].astype(int).tolist())
-        self.inflatedOccupancyDict = dict(zip(squares, grid[:, 2].tolist())) # A brand new dictionary every time, so squares that are no longer inflated disappear.
+        self.inflatedOccupancyDict = dict(zip(squares, grid[:, 2].tolist())) # A brand new dictionary every time, so squares that are no longer occupied disappear.
 
     def isBlocked(self, x, y):
         if max(abs(x - self.startSquare[0]), abs(y - self.startSquare[1])) <= self.STARTCLEARANCE:
-            return False # The robot is sitting here, so these squares can't be treated as blocked.
+            return False # The robot is sitting here, so these squares cant be treated as blocked.
 
         return self.inflatedOccupancyDict.get((x, y), 1) > 0 # Default value is 1 so that any square not inside the occupancy dict counts as blocked.
 
@@ -139,11 +132,11 @@ class pathPlanning(Node):
 
     def isKnownOccupied(self, x, y): # Same as isBlocked, except a square that is not inside the occupancy dict counts as unknown instead of blocked.
         if max(abs(x - self.startSquare[0]), abs(y - self.startSquare[1])) <= self.STARTCLEARANCE:
-            return False # Same start exemption as isBlocked.
+            return False # start exemption
 
         return self.inflatedOccupancyDict.get((x, y), -1) > 0 # Default value is -1 so that unknown squares are NOT treated as occupied. Otherwise every square next to unexplored space would fail the clearance check.
 
-    def hasClearance(self, x, y): # Checks that no known occupied square is within MINCLEARANCE squares of (x, y), so the path can't squeeze through a gap that is only a square or two wide.
+    def hasClearance(self, x, y): # Checks that no known occupied square is within MINCLEARANCE squares of (x, y)
         if max(abs(x - self.targetSquare[0]), abs(y - self.targetSquare[1])) <= self.TARGETGRACE:
             return True
 
@@ -172,18 +165,13 @@ class pathPlanning(Node):
         return (dx + dy) + (np.sqrt(2) - 2) * min(dx, dy)
 
     def determineMoveOrder(self, targetSquare):
-        print("WE DETERMINING MOVE ORDER")
-
         currentSquare = targetSquare
         finalMovesList = []
 
-        print("LENGTH OF DICT: ", len(self.shortestDict.items()))
         iterationCount = 0
         
         while True:
-            print("ITERATION COUNT: ", iterationCount)
             iterationCount += 1
-            print("SQUARE: ", currentSquare)
             
             finalMovesList.append((currentSquare[0], currentSquare[1]))
             previousSquare = self.shortestDict[currentSquare] # ShortestDict takes coordinate pairs as keys, so I have to exclude score when updating currentSquare.
@@ -201,10 +189,8 @@ class pathPlanning(Node):
 
             currentSquare = (previousSquare[0], previousSquare[1])
 
-        print("WE DETERMINED MOVE ORDER NOW")
 
     def prepareMoveList(self, moveList):
-        print("WE PREPARING FINAL MOVE LIST")
         finalList = []
 
         if len(moveList) > 3:
@@ -226,11 +212,8 @@ class pathPlanning(Node):
         msg = Float64MultiArray()
         msg.data = np.array(finalList, dtype=float).flatten().tolist()
         self.path_publisher.publish(msg)
-
-        #print("MOVELIST: ", moveList)
     
     def createPath(self):
-        print("WE CREATING PATH")
         self.shortestDict.clear()
         self.clearanceCache.clear() # The grid changes between plans, so old clearance answers can't be reused.
 
@@ -239,11 +222,9 @@ class pathPlanning(Node):
         self.startSquare = (startX, startY)
 
         if self.targetSquare == self.startSquare:
-            print("WE ARE ALREADY AT THE TARGET")
             return
 
         if self.isBlocked(self.targetSquare[0], self.targetSquare[1]):
-            print("TARGET SQUARE IS BLOCKED")
             return
 
         robotSquare = [0, 0.0, startX, startY] # squares in the queue are saved as [score, distanceTraveled, x, y]. The parent of every square lives in shortestDict.
@@ -256,8 +237,6 @@ class pathPlanning(Node):
         heapq.heapify(squareHeap)
         heapq.heappush(squareHeap, robotSquare)
 
-        expandedCount = 0
-
         while squareHeap:
             startSquare = heapq.heappop(squareHeap)
             currentSquare = (startSquare[2], startSquare[3])
@@ -267,12 +246,6 @@ class pathPlanning(Node):
 
             if currentSquare == self.targetSquare: # The goal is only checked when it is popped, which is what makes the path the cheapest one.
                 self.determineMoveOrder(self.targetSquare)
-                return
-
-            expandedCount += 1
-
-            if expandedCount > self.MAXEXPANSIONS:
-                print("TOO MANY EXPANSIONS, GIVING UP")
                 return
 
             for d in self.directions:
@@ -308,8 +281,6 @@ class pathPlanning(Node):
                 gScore[(newX, newY)] = newT
                 self.shortestDict[(newX, newY)] = (startSquare[2], startSquare[3], newT)
                 heapq.heappush(squareHeap, [newScore, newT, newX, newY])
-
-        print("WE EXITED LOOP, NO PATH FOUND")
 
         msg = Point()
         msg.x = float(self.targetSquare[0])

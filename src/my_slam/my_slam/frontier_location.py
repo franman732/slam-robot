@@ -95,7 +95,6 @@ class findFrontiers(Node):
                 self.inflatedOccupancyDict[(x, y)] = value
 
     def findBestSquareInflated(self, square): # square is the target square, in grid coordinates. This function takes that square, and finds the closest valid square in the inflated occupancy grid.
-        print("WE CHECKING FOR VALID FRONTIER AGAIN")
         squareQueue = deque()
         seenSet = set()
         squareQueue.append(square)
@@ -117,7 +116,6 @@ class findFrontiers(Node):
                                 self.stop_publisher.publish(msg)
 
                             if (newSquare[0], newSquare[1]) == self.invalidFrontier:
-                                print("INVALID FRONTIER ADDED -----------------------------")
                                 self.invalidFrontierSet.add((square[0], square[1]))
                                 self.invalidFrontierCounter += 1
                                 return
@@ -129,7 +127,6 @@ class findFrontiers(Node):
 
                             self.invalidFrontierCounter = 0
 
-                            print("PUBLISHED VALID FRONTIER")
                             msg = Point()
                             msg.x = newSquare[0]
                             msg.y = newSquare[1]
@@ -159,7 +156,6 @@ class findFrontiers(Node):
             frontierList = []
 
             while frontierQueue:
-                #print("WE IN QUEUE")
                 startSquare = frontierQueue.popleft()
 
                 if startSquare in seenFrontierSet:
@@ -181,13 +177,7 @@ class findFrontiers(Node):
                 frontierList.append(startSquare)
                 seenFrontierSet.add(startSquare)
 
-                #print("SQUARE COUNTER: ", squareCounter)
-
-            #print("WE OUT OF QUEUE")
-
             if squareCounter > bestFrontier[2]: # This gets the mean x and mean y of the frontier.
-                #print("BEST FRONTIER: ", bestFrontier[2])
-
                 bestDist = np.inf
 
                 for square in frontierList: # This gets the actual square closest to the frontier
@@ -198,7 +188,6 @@ class findFrontiers(Node):
                         bestDist = dist
 
                 if (candidate[0], candidate[1]) in self.invalidFrontierSet:
-                    print("INVALID FRONTIER SQUARE. SKIPPING")
                     continue
 
                 frontierSquare = candidate
@@ -206,17 +195,12 @@ class findFrontiers(Node):
                 bestFrontier[1] = meanY
                 bestFrontier[2] = squareCounter
 
-        #print("MEANX: ", bestFrontier[0])
-        #print("MEAN Y: ", bestFrontier[1])
-
         if bestFrontier[2] >= 6:
             self.findBestSquareInflated(frontierSquare)
         else:
-            print("NUMSQUARES: ", bestFrontier[2])
             print("WE SEARCHED EVERYTHING ALREADY WE DONE WOOOOO ------------------------")
 
     def locateFrontiers(self, message):
-        #print("WERE LOCATING")
         seenLocateSet = set()
         frontierSet = set()
         locateQueue = deque()
@@ -264,9 +248,9 @@ class findFrontiers(Node):
 
         self.findBestFrontier(frontierSet)
 
-        #print("WE LOCATED FRONTIERS")
-
 def main(args = None):
+    print("WE RUNNING FRONTIER FINDER")
+
     rclpy.init(args = args)
 
     frontierNode = findFrontiers()
@@ -279,5 +263,4 @@ def main(args = None):
 
 
 if __name__ == "__main__":
-    print("WE RUNNING FRONTIER FINDER")
     main()
